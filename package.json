@@ -1,6 +1,7 @@
 {
   "name": "pebble-meds",
   "version": "1.0.0",
+  "author": "Britt Piehler",
   "keywords": ["pebble-app"],
   "pebble": {
     "uuid": "d4e8a2f0-1b3c-4d5e-8f9a-0b1c2d3e4f5a",
@@ -8,7 +9,7 @@
     "longName": "Pebble Meds",
     "companyName": "",
     "versionLabel": "1.0",
-    "sdkVersion": "3",
+    "sdkVersion": "4",
     "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery"],
     "watchapp": {
       "watchface": false
