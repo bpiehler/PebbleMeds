@@ -167,7 +167,7 @@ Defined in `package.json` → auto-generated into C header.
 - Select → opens Detail View.
 
 ### 2. Detail View
-- Centered pill shape drawn with GDraw primitives (color on chalk/basalt/emery, white on aplite/diorite).
+- Centered pill shape drawn with GDraw primitives (`#ifdef PBL_COLOR` for color fill, white on monochrome).
 - Text: Med Name, Taker, Dose Amount.
 - Round 2: `text_layer_enable_screen_text_flow_and_paging` for text wrapping.
 - Privacy mode: reveals name/dose only after Select press.
@@ -249,17 +249,28 @@ PebbleMeds/
 
 ---
 
-## Build Targets (package.json platforms)
+## Build Targets
 
-| Platform | Hardware | Color | Shape |
-|---|---|---|---|
-| `aplite` | Pebble Classic / Steel | Monochrome | Rectangular |
-| `diorite` | Pebble 2 | Monochrome | Rectangular |
-| `basalt` | Pebble Time / Time Steel | 64-color | Rectangular |
-| `chalk` | Pebble Time Round | 64-color | Round |
-| `emery` | Pebble Time 2 | 64-color | Rectangular (large) |
+| Platform | Hardware | Color | Shape | Resolution | Notes |
+|---|---|---|---|---|---|
+| `aplite` | Pebble Classic / Steel | Monochrome | Rectangular | 144×168 | Legacy |
+| `diorite` | Pebble 2 | Monochrome | Rectangular | 144×168 | Legacy |
+| `basalt` | Pebble Time / Time Steel | 64-color | Rectangular | 144×168 | |
+| `chalk` | Pebble Time Round | 64-color | Round | 180×180 | |
+| `emery` | Pebble Time 2 | 64-color | Rectangular | 200×228 | |
+| `flint` | Pebble 2 Duo (new 2025) | Monochrome | Rectangular | 144×168 | No touchscreen |
+| `gabbro` | Pebble Round 2 (new 2025) | 64-color | Round | 260×260 | **Primary contest target**; touchscreen; 200+ DPI e-paper |
 
-Round 2 enhancements gated by `#ifdef PBL_ROUND` (layout) and `#ifdef PBL_COLOR` (color). This allows real-device testing on user's existing Pebble while preserving Round 2 contest features.
+### Platform capability macros
+
+| Macro | Platforms |
+|---|---|
+| `PBL_ROUND` | `chalk`, `gabbro` |
+| `PBL_COLOR` | `basalt`, `chalk`, `emery`, `gabbro` |
+| `PBL_RECT` | `aplite`, `diorite`, `basalt`, `emery`, `flint` |
+| Monochrome (no PBL_COLOR) | `aplite`, `diorite`, `flint` |
+
+Use `PBL_ROUND` for round-layout code (text flow, circular canvas math), `PBL_COLOR` for color drawing, never check platform names directly. `gabbro`'s touchscreen requires additional handling in Phase 4 — button-based interaction used for all platforms in Phases 2/3.
 
 ---
 
