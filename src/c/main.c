@@ -32,7 +32,7 @@ static void init(void) {
   appmessage_init();
 
   // Determine why the app launched and respond appropriately.
-  LaunchReason reason = launch_reason();
+  AppLaunchReason reason = launch_reason();
   if (reason == APP_LAUNCH_WAKEUP) {
     WakeupId wakeup_id;
     int32_t wakeup_cookie;
