@@ -10,7 +10,7 @@
     "companyName": "",
     "versionLabel": "1.0",
     "sdkVersion": "4",
-    "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery"],
+    "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery", "flint", "gabbro"],
     "watchapp": {
       "watchface": false
     },
