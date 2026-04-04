@@ -47,17 +47,8 @@ Pebble.addEventListener('ready', function () {
 // The HTML file is kept in src/pkjs/config.html for maintainability;
 // the Pebble build system bundles everything under src/pkjs/ together.
 function getConfigUrl() {
-  // Embed the config HTML inline to avoid same-origin issues on device.
-  // During development this function can be replaced with a hosted URL.
-  try {
-    var html = require('./config.html');
-    return 'data:text/html,' + encodeURIComponent(html);
-  } catch (e) {
-    // Fallback: if require doesn't work in this SDK version, the HTML page
-    // should be hosted and the URL returned directly.
-    console.log('config.html require failed, see PLAN.md for hosting options');
-    return null;
-  }
+  var html = require('./config_html');
+  return 'data:text/html,' + encodeURIComponent(html);
 }
 
 Pebble.addEventListener('showConfiguration', function () {
