@@ -9,15 +9,15 @@
   "watchapp": {
     "watchface": false
   },
-  "appKeys": {
-    "KEY_CONFIG_JSON":  0,
-    "KEY_CHUNK_INDEX":  1,
-    "KEY_CHUNK_TOTAL":  2,
-    "KEY_ACTION":       3,
-    "KEY_MED_INDEX":    4,
-    "KEY_DOSE_TS":      5,
-    "KEY_REQUEST_SYNC": 6
-  },
+  "messageKeys": [
+    "ConfigJson",
+    "ChunkIndex",
+    "ChunkTotal",
+    "Action",
+    "MedIndex",
+    "DoseTs",
+    "RequestSync"
+  ],
   "resources": {
     "media": []
   },
