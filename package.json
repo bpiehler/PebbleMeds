@@ -1,0 +1,31 @@
+{
+  "name": "pebble-meds",
+  "version": "1.0.0",
+  "keywords": ["pebble-app"],
+  "pebble": {
+    "uuid": "d4e8a2f0-1b3c-4d5e-8f9a-0b1c2d3e4f5a",
+    "shortName": "PebbleMeds",
+    "longName": "Pebble Meds",
+    "companyName": "",
+    "versionLabel": "1.0",
+    "sdkVersion": "3",
+    "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery"],
+    "watchapp": {
+      "watchface": false
+    },
+    "appKeys": {
+      "KEY_CONFIG_JSON":  0,
+      "KEY_CHUNK_INDEX":  1,
+      "KEY_CHUNK_TOTAL":  2,
+      "KEY_ACTION":       3,
+      "KEY_MED_INDEX":    4,
+      "KEY_DOSE_TS":      5,
+      "KEY_REQUEST_SYNC": 6
+    },
+    "resources": {
+      "media": []
+    },
+    "capabilities": ["timeline_enabled"],
+    "js": ["src/pkjs/index.js"]
+  }
+}

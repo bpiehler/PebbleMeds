@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pebble Meds Configuration</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-size: 15px;
+    padding-bottom: 80px;
+  }
+
+  header {
+    background: #16213e;
+    padding: 16px;
+    text-align: center;
+    border-bottom: 1px solid #0f3460;
+  }
+
+  header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e94560;
+    letter-spacing: 1px;
+  }
+
+  header p {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+  }
+
+  section {
+    margin: 16px;
+    background: #16213e;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #0f3460;
+  }
+
+  section h2 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 12px 16px 8px;
+    background: #0f3460;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #0f3460;
+  }
+
+  .row:last-child { border-bottom: none; }
+
+  .row label { font-size: 15px; }
+
+  .row .hint {
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+  }
+
+  .row input[type="number"] {
+    width: 70px;
+    padding: 6px 10px;
+    background: #0f3460;
+    border: 1px solid #e94560;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 15px;
+    text-align: center;
+  }
+
+  /* Toggle switch */
+  .toggle-wrap { position: relative; display: inline-block; width: 48px; height: 26px; }
+  .toggle-wrap input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0;
+    background: #444; border-radius: 26px;
+    transition: background 0.2s;
+    cursor: pointer;
+  }
+  .slider::before {
+    content: "";
+    position: absolute;
+    width: 20px; height: 20px;
+    left: 3px; bottom: 3px;
+    background: #fff; border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .toggle-wrap input:checked + .slider { background: #e94560; }
+  .toggle-wrap input:checked + .slider::before { transform: translateX(22px); }
+
+  /* Med list */
+  #med-list { padding: 8px 16px; }
+
+  .med-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #0f3460;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+
+  .med-item-info { flex: 1; min-width: 0; }
+
+  .med-item-name {
+    font-weight: 600;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .med-item-sub {
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .med-item-swatch {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    border: 2px solid #444;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .med-item-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+  .btn-icon {
+    background: none;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: #ccc;
+    padding: 4px 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .btn-icon:hover { border-color: #e94560; color: #e94560; }
+
+  .btn-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 10px;
+    background: none;
+    border: 1px dashed #e94560;
+    border-radius: 8px;
+    color: #e94560;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+
+  .btn-add:hover { background: rgba(233,69,96,0.1); }
+
+  .med-count { font-size: 11px; color: #888; text-align: right; margin-bottom: 6px; }
+
+  /* Save button */
+  .save-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    padding: 12px 16px;
+    background: #16213e;
+    border-top: 1px solid #0f3460;
+  }
+
+  .btn-save {
+    width: 100%;
+    padding: 14px;
+    background: #e94560;
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .btn-save:hover { background: #c73652; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    overflow-y: auto;
+    padding: 16px;
+  }
+
+  .modal-overlay.open { display: block; }
+
+  .modal {
+    background: #16213e;
+    border-radius: 12px;
+    border: 1px solid #0f3460;
+    max-width: 480px;
+    margin: 0 auto;
+    overflow: hidden;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: #0f3460;
+  }
+
+  .modal-header h3 { font-size: 16px; font-weight: 600; }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .modal-body { padding: 16px; }
+
+  .field { margin-bottom: 14px; }
+
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  .field .field-hint {
+    font-size: 11px;
+    color: #888;
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  .field input[type="text"],
+  .field input[type="time"],
+  .field select {
+    width: 100%;
+    padding: 9px 12px;
+    background: #0f3460;
+    border: 1px solid #444;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 14px;
+  }
+
+  .field input:focus,
+  .field select:focus {
+    outline: none;
+    border-color: #e94560;
+  }
+
+  /* Schedule type radio */
+  .schedule-radios { display: flex; gap: 10px; }
+
+  .schedule-radios label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px;
+    background: #0f3460;
+    border: 1px solid #444;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: normal;
+    color: #e0e0e0;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .schedule-radios input[type="radio"] { display: none; }
+
+  .schedule-radios input[type="radio"]:checked + span {
+    color: #e94560;
+    font-weight: 600;
+  }
+
+  .schedule-radios label:has(input:checked) {
+    border-color: #e94560;
+    background: rgba(233,69,96,0.1);
+  }
+
+  /* Fixed times list */
+  .times-list { display: flex; flex-direction: column; gap: 6px; }
+
+  .time-entry { display: flex; align-items: center; gap: 8px; }
+
+  .time-entry input[type="time"] {
+    flex: 1;
+    padding: 8px 10px;
+    background: #0f3460;
+    border: 1px solid #444;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 14px;
+  }
+
+  .time-entry input[type="time"]:focus { border-color: #e94560; outline: none; }
+
+  .btn-remove-time {
+    background: none;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: #aaa;
+    padding: 6px 10px;
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .btn-remove-time:hover { border-color: #e94560; color: #e94560; }
+
+  .btn-add-time {
+    background: none;
+    border: 1px dashed #444;
+    border-radius: 8px;
+    color: #aaa;
+    padding: 7px;
+    font-size: 13px;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .btn-add-time:hover { border-color: #e94560; color: #e94560; }
+
+  /* Interval fields */
+  .interval-row { display: flex; gap: 10px; }
+  .interval-row .field { flex: 1; }
+
+  /* Shape picker */
+  .shape-grid {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .shape-opt { display: none; }
+
+  .shape-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    background: #0f3460;
+    border: 1px solid #444;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 11px;
+    color: #aaa;
+    min-width: 64px;
+  }
+
+  .shape-label:hover { border-color: #888; }
+
+  .shape-opt:checked + .shape-label {
+    border-color: #e94560;
+    background: rgba(233,69,96,0.1);
+    color: #e94560;
+  }
+
+  .shape-icon { width: 32px; height: 32px; }
+
+  /* Color picker */
+  .color-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .color-opt { display: none; }
+
+  .color-swatch-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+
+  .color-swatch {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    transition: border-color 0.15s;
+  }
+
+  .color-opt:checked + .color-swatch-label .color-swatch {
+    border-color: #e94560;
+    outline: 2px solid #e94560;
+    outline-offset: 2px;
+  }
+
+  .color-name { font-size: 9px; color: #888; text-align: center; max-width: 40px; }
+
+  /* Modal footer */
+  .modal-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #0f3460;
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn-cancel {
+    flex: 1;
+    padding: 12px;
+    background: none;
+    border: 1px solid #444;
+    border-radius: 8px;
+    color: #aaa;
+    font-size: 15px;
+    cursor: pointer;
+  }
+
+  .btn-save-med {
+    flex: 2;
+    padding: 12px;
+    background: #e94560;
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pebble Meds</h1>
+  <p>Medication Reminder Configuration</p>
+</header>
+
+<!-- Global Settings -->
+<section>
+  <h2>Global Settings</h2>
+
+  <div class="row">
+    <div>
+      <div class="label">Snooze Duration</div>
+      <div class="hint">Minutes before re-alerting an unacknowledged dose</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <input type="number" id="snooze-mins" min="1" max="60" value="15">
+      <span style="color:#888;font-size:13px;">min</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <div class="label">Privacy Mode</div>
+      <div class="hint">Show "Medication Due" instead of drug name on notifications and Timeline</div>
+    </div>
+    <label class="toggle-wrap">
+      <input type="checkbox" id="privacy-mode">
+      <span class="slider"></span>
+    </label>
+  </div>
+</section>
+
+<!-- Medications -->
+<section>
+  <h2>Medications</h2>
+  <div id="med-list">
+    <div class="med-count" id="med-count">0 / 16 medications</div>
+    <button class="btn-add" id="btn-add-med" onclick="openModal(-1)">
+      <span style="font-size:18px;">+</span> Add Medication
+    </button>
+  </div>
+</section>
+
+<!-- Save bar -->
+<div class="save-bar">
+  <button class="btn-save" onclick="saveConfig()">Save &amp; Close</button>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Add Medication</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Taker -->
+      <div class="field">
+        <label>Who takes this?</label>
+        <input type="text" id="f-taker" placeholder="e.g. Self, Murray, Lola" maxlength="24">
+      </div>
+
+      <!-- Medication Name -->
+      <div class="field">
+        <label>Medication Name</label>
+        <input type="text" id="f-name" placeholder="e.g. Acetaminophen" maxlength="32">
+      </div>
+
+      <!-- Dose Amount -->
+      <div class="field">
+        <label>Dose Amount <span style="font-weight:normal;color:#888;">(optional)</span></label>
+        <input type="text" id="f-dose" placeholder="e.g. 1000mg, 2 capsules, 5ml" maxlength="24">
+      </div>
+
+      <!-- Schedule Type -->
+      <div class="field">
+        <label>Schedule Type</label>
+        <div class="schedule-radios">
+          <label>
+            <input type="radio" name="schedule-type" id="sched-fixed" value="fixed" onchange="onScheduleTypeChange()">
+            <span>⏰ Fixed Times</span>
+          </label>
+          <label>
+            <input type="radio" name="schedule-type" id="sched-interval" value="interval" onchange="onScheduleTypeChange()">
+            <span>🔄 Interval</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Fixed Times Panel -->
+      <div id="panel-fixed" class="field">
+        <label>Daily Times <span style="font-weight:normal;color:#888;">(up to 4)</span></label>
+        <div class="times-list" id="times-list"></div>
+        <button class="btn-add-time" id="btn-add-time" onclick="addTimeEntry()">+ Add Time</button>
+        <div class="field-hint">Each time will repeat every day at the specified hour.</div>
+      </div>
+
+      <!-- Interval Panel -->
+      <div id="panel-interval" class="field" style="display:none;">
+        <div class="interval-row">
+          <div class="field">
+            <label>Repeat Every</label>
+            <select id="f-interval-hours">
+              <option value="4">4 hours</option>
+              <option value="6">6 hours</option>
+              <option value="8" selected>8 hours</option>
+              <option value="12">12 hours</option>
+              <option value="24">24 hours</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>First Dose At</label>
+            <input type="time" id="f-start-time" value="08:00">
+          </div>
+        </div>
+        <div class="field-hint" style="background:rgba(233,69,96,0.08);border:1px solid #e9456033;border-radius:6px;padding:8px 10px;margin-top:4px;">
+          ⏱ <strong>Important:</strong> The interval timer resets each time you mark a dose as <em>Taken</em> — not at midnight. For example, if you take an 8-hour medication at 9:00 am, your next reminder will be at 5:00 pm regardless of the start time.
+        </div>
+      </div>
+
+      <!-- Shape -->
+      <div class="field">
+        <label>Pill Shape</label>
+        <div class="shape-grid" id="shape-grid">
+
+          <input type="radio" name="pill-shape" id="shape-round" value="round" class="shape-opt" checked>
+          <label for="shape-round" class="shape-label">
+            <svg class="shape-icon" viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="#666"/></svg>
+            Round
+          </label>
+
+          <input type="radio" name="pill-shape" id="shape-oval" value="oval" class="shape-opt">
+          <label for="shape-oval" class="shape-label">
+            <svg class="shape-icon" viewBox="0 0 32 32"><ellipse cx="16" cy="16" rx="14" ry="9" fill="#666"/></svg>
+            Oval
+          </label>
+
+          <input type="radio" name="pill-shape" id="shape-shield" value="shield" class="shape-opt">
+          <label for="shape-shield" class="shape-label">
+            <svg class="shape-icon" viewBox="0 0 32 32">
+              <path d="M16 3 L28 8 L28 18 Q28 27 16 30 Q4 27 4 18 L4 8 Z" fill="#666"/>
+            </svg>
+            Shield
+          </label>
+
+          <input type="radio" name="pill-shape" id="shape-oblong" value="oblong" class="shape-opt">
+          <label for="shape-oblong" class="shape-label">
+            <svg class="shape-icon" viewBox="0 0 32 32"><rect x="2" y="10" width="28" height="12" rx="6" fill="#666"/></svg>
+            Oblong
+          </label>
+
+          <input type="radio" name="pill-shape" id="shape-drop" value="drop" class="shape-opt">
+          <label for="shape-drop" class="shape-label">
+            <svg class="shape-icon" viewBox="0 0 32 32">
+              <path d="M16 3 Q24 12 24 20 A8 8 0 0 1 8 20 Q8 12 16 3 Z" fill="#666"/>
+            </svg>
+            Drop
+          </label>
+
+        </div>
+      </div>
+
+      <!-- Color -->
+      <div class="field">
+        <label>Pill Color</label>
+        <div class="color-grid" id="color-grid"></div>
+        <div class="field-hint">Color shown on Pebble Time / Time Round. Monochrome watches always show white.</div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save-med" onclick="saveMed()">Save Medication</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Color palette — Pebble 64-color GColor names + approximate hex values
+// ---------------------------------------------------------------------------
+var COLORS = [
+  { name: "GColorWhite",           hex: "#FFFFFF" },
+  { name: "GColorLightGray",       hex: "#AAAAAA" },
+  { name: "GColorDarkGray",        hex: "#555555" },
+  { name: "GColorBlack",           hex: "#000000" },
+  { name: "GColorRed",             hex: "#FF0000" },
+  { name: "GColorOrange",          hex: "#FF5500" },
+  { name: "GColorChromeYellow",    hex: "#FFAA00" },
+  { name: "GColorYellow",          hex: "#FFFF00" },
+  { name: "GColorGreen",           hex: "#00FF00" },
+  { name: "GColorMintGreen",       hex: "#AAFFAA" },
+  { name: "GColorTiffanyBlue",     hex: "#00AAAA" },
+  { name: "GColorCyan",            hex: "#00FFFF" },
+  { name: "GColorBlue",            hex: "#0000FF" },
+  { name: "GColorLiberty",         hex: "#5555AA" },
+  { name: "GColorVividViolet",     hex: "#AA00FF" },
+  { name: "GColorMagenta",         hex: "#FF00FF" },
+  { name: "GColorRichBrilliantLavender", hex: "#FFAAFF" },
+  { name: "GColorBrass",           hex: "#AAAA00" },
+];
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+var meds = [];          // Array of medication objects
+var editingIndex = -1;  // -1 = new med, >=0 = editing existing
+
+// ---------------------------------------------------------------------------
+// Boot: load saved config
+// ---------------------------------------------------------------------------
+document.addEventListener("DOMContentLoaded", function () {
+  buildColorGrid();
+
+  var saved = localStorage.getItem("pebble_meds_config");
+  if (saved) {
+    try {
+      var cfg = JSON.parse(saved);
+      meds = cfg.meds || [];
+      document.getElementById("snooze-mins").value = cfg.settings.snoozeMins || 15;
+      document.getElementById("privacy-mode").checked = cfg.settings.privacyMode || false;
+    } catch (e) {
+      meds = [];
+    }
+  }
+
+  renderMedList();
+});
+
+// ---------------------------------------------------------------------------
+// Color grid builder
+// ---------------------------------------------------------------------------
+function buildColorGrid() {
+  var grid = document.getElementById("color-grid");
+  grid.innerHTML = "";
+  COLORS.forEach(function (c, i) {
+    var radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "pill-color";
+    radio.id = "color-" + i;
+    radio.value = c.name;
+    radio.className = "color-opt";
+    if (i === 0) radio.checked = true;
+
+    var label = document.createElement("label");
+    label.htmlFor = "color-" + i;
+    label.className = "color-swatch-label";
+
+    var swatch = document.createElement("div");
+    swatch.className = "color-swatch";
+    swatch.style.background = c.hex;
+    if (c.hex === "#FFFFFF") swatch.style.border = "3px solid #444";
+
+    var name = document.createElement("div");
+    name.className = "color-name";
+    // Shorten the name for display
+    var short = c.name.replace("GColor", "").replace(/([A-Z])/g, " $1").trim();
+    name.textContent = short;
+
+    label.appendChild(swatch);
+    label.appendChild(name);
+
+    grid.appendChild(radio);
+    grid.appendChild(label);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Render medication list
+// ---------------------------------------------------------------------------
+function renderMedList() {
+  var list = document.getElementById("med-list");
+  var countEl = document.getElementById("med-count");
+  var addBtn = document.getElementById("btn-add-med");
+
+  countEl.textContent = meds.length + " / 16 medications";
+
+  // Remove existing med items (keep count + add button)
+  var items = list.querySelectorAll(".med-item");
+  items.forEach(function (el) { el.remove(); });
+
+  // Re-insert before the add button
+  meds.forEach(function (med, i) {
+    var item = buildMedItem(med, i);
+    list.insertBefore(item, addBtn);
+  });
+
+  // Disable add button when at max
+  if (meds.length >= 16) {
+    addBtn.disabled = true;
+    addBtn.style.opacity = "0.4";
+    addBtn.style.cursor = "not-allowed";
+  } else {
+    addBtn.disabled = false;
+    addBtn.style.opacity = "1";
+    addBtn.style.cursor = "pointer";
+  }
+}
+
+function buildMedItem(med, index) {
+  var div = document.createElement("div");
+  div.className = "med-item";
+
+  // Color swatch
+  var colorHex = "#FFFFFF";
+  COLORS.forEach(function (c) { if (c.name === med.color) colorHex = c.hex; });
+  var swatch = document.createElement("div");
+  swatch.className = "med-item-swatch";
+  swatch.style.background = colorHex;
+  if (colorHex === "#FFFFFF") swatch.style.border = "2px solid #666";
+
+  // Info
+  var info = document.createElement("div");
+  info.className = "med-item-info";
+
+  var nameEl = document.createElement("div");
+  nameEl.className = "med-item-name";
+  nameEl.textContent = med.name;
+
+  var sub = document.createElement("div");
+  sub.className = "med-item-sub";
+  var subParts = [med.taker];
+  if (med.dose) subParts.push(med.dose);
+  if (med.scheduleType === "fixed") {
+    subParts.push(med.times.map(function (t) {
+      return pad(t.h) + ":" + pad(t.m);
+    }).join(", "));
+  } else {
+    subParts.push("Every " + med.intervalHours + "h");
+  }
+  sub.textContent = subParts.join(" · ");
+
+  info.appendChild(nameEl);
+  info.appendChild(sub);
+
+  // Buttons
+  var actions = document.createElement("div");
+  actions.className = "med-item-actions";
+
+  var editBtn = document.createElement("button");
+  editBtn.className = "btn-icon";
+  editBtn.textContent = "Edit";
+  editBtn.onclick = (function (i) { return function () { openModal(i); }; })(index);
+
+  var delBtn = document.createElement("button");
+  delBtn.className = "btn-icon";
+  delBtn.textContent = "✕";
+  delBtn.style.color = "#e94560";
+  delBtn.onclick = (function (i) { return function () { deleteMed(i); }; })(index);
+
+  actions.appendChild(editBtn);
+  actions.appendChild(delBtn);
+
+  div.appendChild(swatch);
+  div.appendChild(info);
+  div.appendChild(actions);
+  return div;
+}
+
+function deleteMed(index) {
+  if (!confirm("Remove " + meds[index].name + "?")) return;
+  meds.splice(index, 1);
+  renderMedList();
+}
+
+// ---------------------------------------------------------------------------
+// Modal open / close
+// ---------------------------------------------------------------------------
+function openModal(index) {
+  editingIndex = index;
+  document.getElementById("modal-title").textContent =
+    index === -1 ? "Add Medication" : "Edit Medication";
+
+  if (index === -1) {
+    // Defaults for new med
+    document.getElementById("f-taker").value = "";
+    document.getElementById("f-name").value = "";
+    document.getElementById("f-dose").value = "";
+    document.getElementById("sched-fixed").checked = true;
+    document.getElementById("f-interval-hours").value = "8";
+    document.getElementById("f-start-time").value = "08:00";
+    document.getElementById("shape-round").checked = true;
+    document.querySelector('input[name="pill-color"]').checked = true;
+    setTimes([{ h: 8, m: 0 }]);
+  } else {
+    var med = meds[index];
+    document.getElementById("f-taker").value = med.taker;
+    document.getElementById("f-name").value = med.name;
+    document.getElementById("f-dose").value = med.dose || "";
+
+    if (med.scheduleType === "interval") {
+      document.getElementById("sched-interval").checked = true;
+      document.getElementById("f-interval-hours").value = String(med.intervalHours);
+      document.getElementById("f-start-time").value = pad(med.startHour) + ":" + pad(med.startMinute);
+    } else {
+      document.getElementById("sched-fixed").checked = true;
+      setTimes(med.times);
+    }
+
+    // Shape
+    var shapeInput = document.querySelector('input[name="pill-shape"][value="' + med.shape + '"]');
+    if (shapeInput) shapeInput.checked = true;
+
+    // Color
+    var colorInput = document.querySelector('input[name="pill-color"][value="' + med.color + '"]');
+    if (colorInput) colorInput.checked = true;
+  }
+
+  onScheduleTypeChange();
+  document.getElementById("modal-overlay").classList.add("open");
+}
+
+function closeModal() {
+  document.getElementById("modal-overlay").classList.remove("open");
+}
+
+// Close modal on overlay click
+document.getElementById("modal-overlay").addEventListener("click", function (e) {
+  if (e.target === this) closeModal();
+});
+
+// ---------------------------------------------------------------------------
+// Schedule type toggling
+// ---------------------------------------------------------------------------
+function onScheduleTypeChange() {
+  var isFixed = document.getElementById("sched-fixed").checked;
+  document.getElementById("panel-fixed").style.display = isFixed ? "block" : "none";
+  document.getElementById("panel-interval").style.display = isFixed ? "none" : "block";
+}
+
+// ---------------------------------------------------------------------------
+// Fixed times management
+// ---------------------------------------------------------------------------
+function setTimes(times) {
+  var list = document.getElementById("times-list");
+  list.innerHTML = "";
+  times.forEach(function (t) {
+    addTimeEntry(pad(t.h) + ":" + pad(t.m));
+  });
+  updateAddTimeBtn();
+}
+
+function addTimeEntry(value) {
+  var list = document.getElementById("times-list");
+  if (list.children.length >= 4) return;
+
+  var row = document.createElement("div");
+  row.className = "time-entry";
+
+  var input = document.createElement("input");
+  input.type = "time";
+  input.value = value || "08:00";
+
+  var removeBtn = document.createElement("button");
+  removeBtn.className = "btn-remove-time";
+  removeBtn.textContent = "−";
+  removeBtn.type = "button";
+  removeBtn.onclick = function () {
+    if (list.children.length > 1) {
+      row.remove();
+      updateAddTimeBtn();
+    }
+  };
+
+  row.appendChild(input);
+  row.appendChild(removeBtn);
+  list.appendChild(row);
+  updateAddTimeBtn();
+}
+
+function updateAddTimeBtn() {
+  var list = document.getElementById("times-list");
+  var btn = document.getElementById("btn-add-time");
+  btn.style.display = list.children.length >= 4 ? "none" : "block";
+}
+
+function getTimes() {
+  var entries = document.querySelectorAll("#times-list .time-entry input[type='time']");
+  var times = [];
+  entries.forEach(function (input) {
+    var parts = input.value.split(":");
+    times.push({ h: parseInt(parts[0], 10), m: parseInt(parts[1], 10) });
+  });
+  return times;
+}
+
+// ---------------------------------------------------------------------------
+// Save medication from modal
+// ---------------------------------------------------------------------------
+function saveMed() {
+  var taker = document.getElementById("f-taker").value.trim();
+  var name  = document.getElementById("f-name").value.trim();
+  var dose  = document.getElementById("f-dose").value.trim();
+  var isFixed = document.getElementById("sched-fixed").checked;
+  var shape = document.querySelector('input[name="pill-shape"]:checked').value;
+  var color = document.querySelector('input[name="pill-color"]:checked').value;
+
+  if (!taker) { alert("Please enter who takes this medication."); return; }
+  if (!name)  { alert("Please enter the medication name."); return; }
+
+  var med = { taker: taker, name: name, dose: dose, shape: shape, color: color };
+
+  if (isFixed) {
+    var times = getTimes();
+    if (!times.length) { alert("Please add at least one time."); return; }
+    med.scheduleType = "fixed";
+    med.times = times;
+  } else {
+    var startParts = document.getElementById("f-start-time").value.split(":");
+    med.scheduleType  = "interval";
+    med.intervalHours = parseInt(document.getElementById("f-interval-hours").value, 10);
+    med.startHour     = parseInt(startParts[0], 10);
+    med.startMinute   = parseInt(startParts[1], 10);
+    med.lastTakenTs   = (editingIndex >= 0 && meds[editingIndex].lastTakenTs)
+                          ? meds[editingIndex].lastTakenTs
+                          : 0;
+  }
+
+  if (editingIndex === -1) {
+    meds.push(med);
+  } else {
+    meds[editingIndex] = med;
+  }
+
+  closeModal();
+  renderMedList();
+}
+
+// ---------------------------------------------------------------------------
+// Save full config and return to watch
+// ---------------------------------------------------------------------------
+function saveConfig() {
+  var cfg = {
+    meds: meds,
+    settings: {
+      snoozeMins:  parseInt(document.getElementById("snooze-mins").value, 10) || 15,
+      privacyMode: document.getElementById("privacy-mode").checked
+    }
+  };
+
+  // Persist locally so config survives next open
+  localStorage.setItem("pebble_meds_config", JSON.stringify(cfg));
+
+  // Send config back to the watch via pebblejs URL scheme
+  var encoded = encodeURIComponent(JSON.stringify(cfg));
+  document.location = "pebblejs://close#" + encoded;
+}
+
+// ---------------------------------------------------------------------------
+// Utility
+// ---------------------------------------------------------------------------
+function pad(n) { return n < 10 ? "0" + n : "" + n; }
+</script>
+</body>
+</html>

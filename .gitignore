@@ -1,0 +1,5 @@
+build/
+.pebble-linked/
+*.pbw
+node_modules/
+.DS_Store
