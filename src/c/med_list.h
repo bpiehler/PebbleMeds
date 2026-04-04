@@ -1,5 +1,6 @@
 #pragma once
 #include <pebble.h>
+#include <stdbool.h>
 
 #define MED_MAX 16
 
@@ -39,9 +40,16 @@ typedef struct {
     GColor       color;
 } MedEntry;
 
-void      med_list_init(void);
-void      med_list_deinit(void);
-uint8_t   med_list_count(void);
-MedEntry *med_list_get(uint8_t index);
-void      med_list_set_count(uint8_t count);
-void      med_list_set(uint8_t index, const MedEntry *entry);
+typedef struct {
+    uint16_t snoozeMins;
+    bool     privacyMode;
+} AppSettings;
+
+void         med_list_init(void);
+void         med_list_deinit(void);
+uint8_t      med_list_count(void);
+MedEntry    *med_list_get(uint8_t index);
+void         med_list_set_count(uint8_t count);
+void         med_list_set(uint8_t index, const MedEntry *entry);
+AppSettings *med_list_get_settings(void);
+void         med_list_save_settings(void);
