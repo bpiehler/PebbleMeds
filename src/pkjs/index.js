@@ -46,16 +46,14 @@ Pebble.addEventListener('ready', function () {
 // and encode it as a data URI so the app remains fully self-contained.
 // The HTML file is kept in src/pkjs/config.html for maintainability;
 // the Pebble build system bundles everything under src/pkjs/ together.
+var CONFIG_URL = 'https://bpiehler.github.io/PebbleMeds/src/pkjs/config.html';
+
 function getConfigUrl() {
-  var html = require('./config_html');
-  var base = 'data:text/html,' + encodeURIComponent(html);
-  // Pass current config as URL fragment so config.html can pre-populate
-  // the form. localStorage is not available inside data URI pages on Android.
   var cfg = loadConfig();
   if (cfg) {
-    base += '#' + encodeURIComponent(JSON.stringify(cfg));
+    return CONFIG_URL + '#' + encodeURIComponent(JSON.stringify(cfg));
   }
-  return base;
+  return CONFIG_URL;
 }
 
 Pebble.addEventListener('showConfiguration', function () {
