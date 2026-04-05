@@ -352,7 +352,7 @@ void appmessage_init(void) {
     app_message_register_inbox_received(inbox_received);
     app_message_register_inbox_dropped(inbox_dropped);
     app_message_register_outbox_failed(outbox_failed);
-    app_message_open(512, 256);
+    app_message_open(768, 256);
 }
 
 void appmessage_deinit(void) {

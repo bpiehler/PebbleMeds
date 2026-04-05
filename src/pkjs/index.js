@@ -94,19 +94,19 @@ function sendConfigToWatch(cfg) {
   var total = chunks.length;
   console.log('Sending config in ' + total + ' chunk(s), total ' + json.length + ' bytes');
 
-  function sendChunk(index) {
-    if (index >= total) {
+  function sendChunk(idx) {
+    if (idx >= total) {
       console.log('Config send complete');
       return;
     }
+    var msg = {};
+    msg[KEY_CONFIG_JSON] = chunks[idx];
+    msg[KEY_CHUNK_INDEX] = idx;
+    msg[KEY_CHUNK_TOTAL] = total;
     Pebble.sendAppMessage(
-      {
-        KEY_CONFIG_JSON: chunks[index],
-        KEY_CHUNK_INDEX: index,
-        KEY_CHUNK_TOTAL: total
-      },
-      function () { sendChunk(index + 1); },
-      function (err) { console.log('Chunk ' + index + ' failed: ' + JSON.stringify(err)); }
+      msg,
+      function () { sendChunk(idx + 1); },
+      function (err) { console.log('Chunk ' + idx + ' failed: ' + JSON.stringify(err)); }
     );
   }
 
