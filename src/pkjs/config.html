@@ -674,10 +674,12 @@ var editingIndex = -1;  // -1 = new med, >=0 = editing existing
 document.addEventListener("DOMContentLoaded", function () {
   buildColorGrid();
 
-  var saved = localStorage.getItem("pebble_meds_config");
-  if (saved) {
+  // Initial config is passed as a URL fragment by index.js (localStorage
+  // is not available inside data URI pages on Android).
+  var hash = location.hash.slice(1);
+  if (hash) {
     try {
-      var cfg = JSON.parse(saved);
+      var cfg = JSON.parse(decodeURIComponent(hash));
       meds = cfg.meds || [];
       document.getElementById("snooze-mins").value = cfg.settings.snoozeMins || 15;
       document.getElementById("privacy-mode").checked = cfg.settings.privacyMode || false;
@@ -999,9 +1001,6 @@ function saveConfig() {
       privacyMode: document.getElementById("privacy-mode").checked
     }
   };
-
-  // Persist locally so config survives next open
-  localStorage.setItem("pebble_meds_config", JSON.stringify(cfg));
 
   // Send config back to the watch via pebblejs URL scheme
   var encoded = encodeURIComponent(JSON.stringify(cfg));

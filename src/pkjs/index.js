@@ -48,7 +48,14 @@ Pebble.addEventListener('ready', function () {
 // the Pebble build system bundles everything under src/pkjs/ together.
 function getConfigUrl() {
   var html = require('./config_html');
-  return 'data:text/html,' + encodeURIComponent(html);
+  var base = 'data:text/html,' + encodeURIComponent(html);
+  // Pass current config as URL fragment so config.html can pre-populate
+  // the form. localStorage is not available inside data URI pages on Android.
+  var cfg = loadConfig();
+  if (cfg) {
+    base += '#' + encodeURIComponent(JSON.stringify(cfg));
+  }
+  return base;
 }
 
 Pebble.addEventListener('showConfiguration', function () {
