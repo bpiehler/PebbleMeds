@@ -12,8 +12,7 @@
     "sdkVersion": "4",
     "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery", "flint", "gabbro"],
     "watchapp": {
-      "watchface": false,
-      "configurable": true
+      "watchface": false
     },
     "messageKeys": [
       "ConfigJson",
@@ -27,7 +26,7 @@
     "resources": {
       "media": []
     },
-    "capabilities": ["timeline_enabled"],
+    "capabilities": ["configurable", "timeline_enabled"],
     "js": "src/pkjs/index.js"
   }
 }
