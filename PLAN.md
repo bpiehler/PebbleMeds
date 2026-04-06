@@ -277,36 +277,156 @@ Use `PBL_ROUND` for round-layout code (text flow, circular canvas math), `PBL_CO
 ## Development Phases
 
 ### Phase 1 — Project Scaffold & HTML Config Page ✅
-- [x] `package.json` with all target platforms and appKeys
+- [x] `package.json` / `appinfo.json` with all 7 target platforms
 - [x] `wscript` build script
-- [x] `src/main.c` minimal skeleton (app init, placeholder windows)
-- [x] `src/pkjs/index.js` (config page launch, webviewclosed handler, AppMessage stubs)
+- [x] `src/c/main.c` skeleton (app init, wakeup + Timeline launch handling)
+- [x] `src/pkjs/index.js` (config page launch, webviewclosed handler, chunked AppMessage, Timeline pins, dose logging)
 - [x] `src/pkjs/config.html` full medication management UI:
   - Global settings: snooze duration, privacy mode toggle
   - Medication list: add / edit / remove (up to 16)
   - Per-med fields: taker, name, dose, schedule (fixed times or interval), shape, color
   - Help text explaining interval reset behavior
   - Save → encodes JSON → sends to watch via `pebblejs://close#`
+- [x] Fixed CloudPebble compatibility: `appinfo.json` flat format, `src/c/` source layout, `AppLaunchReason`, `author` field
+- [x] Switched to automatic `messageKeys` (no more deprecated `appKeys`)
+- [x] Switched JS handling to CommonJS entry point (no more deprecated concatenation)
 
-### Phase 2 — C Watchapp Core & AppMessage Sync
-- [ ] `med_list.c/h`: medication array with `malloc`/`free`; `persist_write_data` caching
-- [ ] `dose_list_window.c/h`: `MenuLayer` chronological next-dose list
-- [ ] `appmessage.c/h`: chunked JSON receive from phone, action send to phone
-- [ ] Wire up `main.c`: window stack, AppMessage handlers, persist load on boot
+### Phase 2 — C Watchapp Core & AppMessage Sync ✅
+- [x] `jsmn.h`: single-header JSON tokenizer
+- [x] `med_list.c/h`: medication array with `persist_write_data` caching; `AppSettings` struct (snooze, privacy) persisted to key 17
+- [x] `dose_list_window.c/h`: `MenuLayer` with next-dose calculation (fixed + interval), insertion sort, 12h/24h formatting, privacy mode, color highlight
+- [x] `appmessage.c/h`: chunked JSON receive + two-level parse (find_matching_brace + per-med 64-token jsmn); GColor/PillShape name lookup; settings parse; action send
+- [x] `detail_window.c/h`: stub (text-only) ready for Phase 3 pill drawing
 
 ### Phase 3 — Notifications, Grouping & Detail View
-- [ ] `notifications.c/h`: wakeup scheduling (next 8 slots), reschedule on fire
-- [ ] Grouping logic: 5-min window, per-taker groups
-- [ ] Snooze loop: reschedule wakeup after `snoozeMins` if unacknowledged
-- [ ] `detail_window.c/h`: pill shape drawing, med info text, Round 2 text flow
-- [ ] Confirmation animation: `PropertyAnimation` slide + checkmark fade
-- [ ] Privacy mode: hide name until Select pressed
 
-### Phase 4 — Timeline API & Round 2 Polish
+#### 3a. Export `next_dose_time` from `med_list`
+`next_dose_time()` is currently `static` in `dose_list_window.c`. Both the dose list and notifications need it, so move it to `med_list.c` and export via `med_list.h`:
+```c
+time_t med_list_next_dose_time(const MedEntry *med, time_t after);
+```
+`dose_list_window.c` then calls the exported version.
+
+#### 3b. `detail_window.c/h` — full implementation
+
+**Layout (rectangular, 144×168 with 30px action bar → 114px content):**
+- Pill canvas layer: 56×56, centered horizontally at x≈57, top at y≈20
+- Name text layer: `GOTHIC_18_BOLD`, below pill, full content width
+- Taker + dose text layer: `GOTHIC_14_BOLD`, below name
+
+**Layout (round — chalk 180×180, gabbro 260×260):**
+- No action bar; pill canvas larger (72×72 for chalk, 100×100 for gabbro via `PBL_DISPLAY_WIDTH`)
+- Text layers below pill; enable `text_layer_enable_screen_text_flow_and_paging` on `PBL_ROUND`
+
+**Pill drawing — `draw_pill(GContext, GPoint center, int r, PillShape, GColor)`:**
+| Shape | Drawing |
+|---|---|
+| `SHAPE_ROUND` | `graphics_fill_circle(center, r)` + stroke |
+| `SHAPE_OVAL` | `graphics_fill_rect` tall rounded rect (w=r, h=2r, corner=r/2) |
+| `SHAPE_OBLONG` | `graphics_fill_rect` wide rounded rect (w=2r, h=r, corner=r/4) |
+| `SHAPE_SHIELD` | 5-point `GPath`: top-center, upper-right, lower-right, lower-left, upper-left |
+| `SHAPE_DROP` | 7-point `GPath` approximating teardrop (pointed top, round bottom) |
+
+Color: `PBL_COLOR` → `med->color`; monochrome → `GColorWhite` fill + `GColorBlack` stroke.  
+GPath objects created once in `window_load`, destroyed in `window_unload`.
+
+**Buttons:**
+- `PBL_RECT`: `ActionBarLayer` (right edge, 30px). Up = Snooze, Select = Taken/Reveal, Down = Skip. Icons NULL for Phase 3; Phase 4 adds bitmaps.
+- `PBL_ROUND`: window click handlers only (no action bar). Select = Taken/Reveal, Up = Snooze, Down = Skip.
+
+**Privacy mode reveal:**
+- State: `static bool s_revealed`; starts `false` when `privacyMode` is ON
+- While `!s_revealed`: name layer shows "Medication Due", dose hidden, Select = Reveal
+- After reveal or when `privacyMode` OFF: normal display, Select = Taken
+
+**Confirmation animation (Taken):**
+- `PropertyAnimation` slides pill canvas layer off bottom of screen (300ms, `AnimationCurveEaseIn`)
+- `animation_stopped` callback pops window without transition
+- All other actions (Snooze, Skip, Back): `window_stack_pop(true)` directly
+
+**Actions (all call `appmessage_send_action` then navigate):**
+- Taken: send `"taken"`, vibrate short, animate pill off, reschedule wakeups
+- Snooze: send `"snooze"`, schedule snooze wakeup, pop window
+- Skip: send `"skipped"`, reschedule wakeups, pop window
+- Back (no action): schedule snooze wakeup (treat as deferred), pop window
+
+#### 3c. `notifications.c/h` — full implementation
+
+**Persist key layout** (extending med_list.c's layout):
+```
+18 = int32  pending snooze Unix timestamp (0 = none)
+```
+
+**API additions to `notifications.h`:**
+```c
+void notifications_handle_wakeup(WakeupId id, int32_t cookie);
+void notifications_handle_timeline_action(uint32_t launch_code);
+void notifications_schedule_wakeups(void);   // cancel-all + reschedule next ≤8 regular + any pending snooze
+void notifications_schedule_snooze(void);    // persist snooze_t = now + snoozeMins, then schedule_wakeups
+```
+`main.c` updated to pass `(wakeup_id, wakeup_cookie)` to `notifications_handle_wakeup`.
+
+**Wakeup cookie values:**
+```c
+#define WAKEUP_COOKIE_DOSE   0
+#define WAKEUP_COOKIE_SNOOZE 1
+```
+
+**`notifications_schedule_wakeups()` algorithm:**
+1. `wakeup_cancel_all()`
+2. Build `DoseEvent candidates[32]` by iterating all meds:
+   - `t = med_list_next_dose_time(med, now)`
+   - Append up to 4 occurrences per med while `t ≤ now + 48h`: for interval advance `t += intervalHours*3600`; for fixed call `med_list_next_dose_time(med, t)` again
+3. Insertion-sort `candidates` by `dose_ts`
+4. Deduplicate by time (skip if same `dose_ts` as previous)
+5. Schedule first `min(8, count)` via `wakeup_schedule(t, WAKEUP_COOKIE_DOSE, false)`
+6. If snooze is pending (`persist_read_int(18) > now`) and `scheduled < 8`, also schedule the snooze wakeup
+
+**`notifications_handle_wakeup()` algorithm:**
+1. If `cookie == WAKEUP_COOKIE_SNOOZE`: clear persisted snooze (`persist_write_int(18, 0)`)
+2. Find due doses: for each med, check `med_list_next_dose_time(med, now - DUE_WINDOW - 1)` ∈ `[now - DUE_WINDOW, now + 60]` (DUE_WINDOW = 300 s)
+3. Group due doses by `taker` string into `DueGroup[]` (max 8 groups)
+4. If 0 due: log warning, reschedule, open dose list
+5. `vibes_short_pulse()`
+6. Push `detail_window` for the first due dose in the first group (Phase 4: full group checklist window for >1 med per taker)
+7. Reschedule wakeups after handling (accounts for new state)
+
+**`notifications_schedule_snooze()`:**
+```c
+time_t snooze_t = time(NULL) + (time_t)settings->snoozeMins * 60;
+persist_write_int(18, (int32_t)snooze_t);
+notifications_schedule_wakeups();  // includes the snooze slot
+```
+
+#### 3d. `appmessage.c` — switch to `MESSAGE_KEY_*`
+Replace the 7 `#define KEY_* N` lines with:
+```c
+#define KEY_CONFIG_JSON  MESSAGE_KEY_ConfigJson
+#define KEY_CHUNK_INDEX  MESSAGE_KEY_ChunkIndex
+#define KEY_CHUNK_TOTAL  MESSAGE_KEY_ChunkTotal
+#define KEY_ACTION       MESSAGE_KEY_Action
+#define KEY_MED_INDEX    MESSAGE_KEY_MedIndex
+#define KEY_DOSE_TS      MESSAGE_KEY_DoseTs
+#define KEY_REQUEST_SYNC MESSAGE_KEY_RequestSync
+```
+Keeps all existing code unchanged; values stay 0–6; eliminates manual/auto drift risk.
+
+#### Phase 3 checklist
+- [ ] `med_list.h/c`: export `med_list_next_dose_time()`
+- [ ] `dose_list_window.c`: use exported `med_list_next_dose_time()`
+- [ ] `detail_window.c/h`: pill drawing, action bar/click handlers, privacy reveal, Taken animation, all actions
+- [ ] `notifications.h`: updated API with `WakeupId`/cookie params and `notifications_schedule_snooze()`
+- [ ] `notifications.c`: full wakeup scheduling, due-dose detection, grouping, snooze persist
+- [ ] `main.c`: pass wakeup id+cookie to `notifications_handle_wakeup`
+- [ ] `appmessage.c`: switch to `MESSAGE_KEY_*` constants
+
+### Phase 4 — Timeline API, App Icon & Round 2 Polish
 - [ ] `src/pkjs/timeline.js`: push 48h of pins on sync
-- [ ] Pin metadata: taker, dose, privacy-mode-aware title
+- [ ] Pin metadata: taker, dose, privacy-mode-aware title; generic white pill icon in privacy mode
 - [ ] Pin actions: Taken / Snooze via `launchCode`
-- [ ] Round 2 layout refinements (260×260 canvas, larger text, round-optimized pill centering)
+- [ ] App icon: 25×25 pill graphic in `resources/images/` — `app_icon~color.png` + `app_icon~bw.png`; register in `appinfo.json` resources
+- [ ] Round 2 / gabbro layout refinements (260×260 canvas, larger text, round-optimized pill centering)
+- [ ] gabbro touchscreen: swipe gesture handling layered on top of button-based flow
 - [ ] Adherence log: append taken/skipped to `localStorage` + `persist_write_data`
 
 ---
