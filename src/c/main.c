@@ -3,6 +3,7 @@
 #include "dose_list_window.h"
 #include "appmessage.h"
 #include "notifications.h"
+#include "dose_log.h"
 
 // ---------------------------------------------------------------------------
 // Launch reason handling
@@ -27,6 +28,7 @@ static void handle_timeline_launch(uint32_t launch_code) {
 static void init(void) {
   // Load cached medication list from persistent storage.
   med_list_init();
+  dose_log_init();
 
   // Open AppMessage channel so we can receive config updates from the phone.
   appmessage_init();
@@ -52,6 +54,7 @@ static void init(void) {
 
 static void deinit(void) {
   // Persist current medication list and state before exit.
+  dose_log_deinit();
   med_list_deinit();
   appmessage_deinit();
 }

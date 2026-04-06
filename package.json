@@ -33,7 +33,14 @@
       "RequestSync"
     ],
     "resources": {
-      "media": []
+      "media": [
+        {
+          "type": "bitmap",
+          "name": "IMAGE_APP_ICON",
+          "file": "images/app_icon.png",
+          "menuIcon": true
+        }
+      ]
     },
     "capabilities": ["configurable", "timeline_enabled"],
     "js": "src/pkjs/index.js"

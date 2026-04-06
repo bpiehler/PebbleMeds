@@ -2,15 +2,21 @@
 #include "med_list.h"
 #include "appmessage.h"
 #include "notifications.h"
+#include "dose_log.h"
 #include <pebble.h>
 
 // ---------------------------------------------------------------------------
 // Pill geometry
 // ---------------------------------------------------------------------------
 
-#ifdef PBL_ROUND
+#if PBL_DISPLAY_WIDTH >= 200
+  // Gabbro (260px) and Emery (200px) — large display, bigger pill
+  #define PILL_R 32
+#elif defined(PBL_ROUND)
+  // Chalk (180px round)
   #define PILL_R 28
 #else
+  // Basalt, Aplite, Diorite, Flint (144px)
   #define PILL_R 20
 #endif
 #define PILL_CANVAS_SIZE (PILL_R * 2 + 4)
@@ -191,6 +197,7 @@ static void select_click(ClickRecognizerRef rec, void *ctx) {
     }
 
     s_action_taken = true;
+    dose_log_record(s_med_index, DOSE_TAKEN, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "taken", (uint32_t)s_dose_time);
     vibes_short_pulse();
 
@@ -206,6 +213,7 @@ static void select_click(ClickRecognizerRef rec, void *ctx) {
 
 static void up_click(ClickRecognizerRef rec, void *ctx) {
     s_action_taken = true;
+    dose_log_record(s_med_index, DOSE_SNOOZED, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "snooze", (uint32_t)s_dose_time);
     notifications_schedule_snooze();
     window_stack_pop(true);
@@ -213,6 +221,7 @@ static void up_click(ClickRecognizerRef rec, void *ctx) {
 
 static void down_click(ClickRecognizerRef rec, void *ctx) {
     s_action_taken = true;
+    dose_log_record(s_med_index, DOSE_SKIPPED, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "skipped", (uint32_t)s_dose_time);
     notifications_schedule_wakeups();
     window_stack_pop(true);
@@ -302,6 +311,7 @@ static void window_unload(Window *window) {
 
     // If dismissed without explicit action, treat as snooze
     if (!s_action_taken) {
+        dose_log_record(s_med_index, DOSE_SNOOZED, (uint32_t)s_dose_time);
         notifications_schedule_snooze();
     }
 
