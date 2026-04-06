@@ -51,6 +51,7 @@ static Layer            *s_canvas_layer;
 static TextLayer        *s_name_layer;
 static TextLayer        *s_taker_layer;
 static TextLayer        *s_dose_layer;
+static TextLayer        *s_hint_layer;
 #ifdef PBL_RECT
 static ActionBarLayer   *s_action_bar;
 #endif
@@ -280,6 +281,14 @@ static void window_load(Window *window) {
     text_layer_enable_screen_text_flow_and_paging(s_dose_layer,  5);
 #endif
 
+    // Button hint line at the bottom — "^Snooze  Taken  vSkip"
+    // ^ = Up button, middle = Select, v = Down
+    s_hint_layer = text_layer_create(GRect(0, bounds.size.h - 16, content_w, 16));
+    text_layer_set_font(s_hint_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    text_layer_set_text_alignment(s_hint_layer, GTextAlignmentCenter);
+    text_layer_set_text(s_hint_layer, "^Snooze  Taken  vSkip");
+    layer_add_child(root, text_layer_get_layer(s_hint_layer));
+
     update_text();
 }
 
@@ -305,6 +314,7 @@ static void window_unload(Window *window) {
     text_layer_destroy(s_name_layer);
     text_layer_destroy(s_taker_layer);
     text_layer_destroy(s_dose_layer);
+    text_layer_destroy(s_hint_layer);
 
     // Destroy GPath objects
     if (s_shield_path) { gpath_destroy(s_shield_path); s_shield_path = NULL; }
