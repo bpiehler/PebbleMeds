@@ -3,6 +3,15 @@
   "version": "1.0.0",
   "author": "Britt Piehler",
   "keywords": ["pebble-app"],
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "jest": {
+    "testMatch": ["**/tests/**/*.test.js"]
+  },
   "pebble": {
     "uuid": "d4e8a2f0-1b3c-4d5e-8f9a-0b1c2d3e4f5a",
     "shortName": "PebbleMeds",

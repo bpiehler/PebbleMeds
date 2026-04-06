@@ -209,52 +209,12 @@ function insertTimelinePin(pin) {
 }
 
 // ---------------------------------------------------------------------------
-// Dose schedule calculation
+// Dose schedule calculation (pure functions live in schedule.js)
 // ---------------------------------------------------------------------------
-function getNextDoseTimes(med, fromTs, toTs) {
-  var times = [];
-  if (med.scheduleType === 'fixed') {
-    times = getFixedTimes(med, fromTs, toTs);
-  } else {
-    times = getIntervalTimes(med, fromTs, toTs);
-  }
-  return times;
-}
-
-function getFixedTimes(med, fromTs, toTs) {
-  var results = [];
-  var date = new Date(fromTs * 1000);
-  // Check today + tomorrow to cover the 48h window
-  for (var dayOffset = 0; dayOffset <= 2; dayOffset++) {
-    var d = new Date(date.getFullYear(), date.getMonth(), date.getDate() + dayOffset);
-    med.times.forEach(function (t) {
-      var ts = Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate(), t.h, t.m, 0).getTime() / 1000);
-      if (ts >= fromTs && ts <= toTs) results.push(ts);
-    });
-  }
-  return results;
-}
-
-function getIntervalTimes(med, fromTs, toTs) {
-  var results = [];
-  var intervalSecs = med.intervalHours * 3600;
-  var base;
-  if (med.lastTakenTs && med.lastTakenTs > 0) {
-    base = med.lastTakenTs + intervalSecs;
-  } else {
-    // First run: use startHour/startMinute today
-    var now = new Date(fromTs * 1000);
-    base = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate(),
-                                med.startHour, med.startMinute, 0).getTime() / 1000);
-    if (base < fromTs) base += intervalSecs;
-  }
-  var ts = base;
-  while (ts <= toTs) {
-    if (ts >= fromTs) results.push(ts);
-    ts += intervalSecs;
-  }
-  return results;
-}
+var schedule       = require('./schedule');
+var getNextDoseTimes = schedule.getNextDoseTimes;
+var getFixedTimes    = schedule.getFixedTimes;
+var getIntervalTimes = schedule.getIntervalTimes;
 
 // ---------------------------------------------------------------------------
 // Persistence (localStorage)
