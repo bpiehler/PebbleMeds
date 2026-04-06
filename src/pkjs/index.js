@@ -165,13 +165,6 @@ function pushTimelinePins(cfg) {
   });
 
   pins.forEach(function (pin) {
-    Pebble.timelineSubscribe(
-      pin.id, function () {}, function (err) {
-        console.log('Timeline subscribe error: ' + err);
-      }
-    );
-    // The Timeline API requires a PUT to the Pebble timeline service.
-    // This is handled via the Pebble.getAccountToken() + REST API.
     insertTimelinePin(pin);
   });
 }
@@ -186,7 +179,7 @@ function buildPin(med, index, ts, privacyMode) {
       type: 'genericPin',
       title: title,
       body: body,
-      tinyIcon: 'system://images/GENERIC_WARNING'
+      tinyIcon: 'system://images/NOTIFICATION_REMINDER'
     },
     actions: [
       { title: 'Taken', type: 'openWatchApp', launchCode: 1 },
@@ -200,7 +193,7 @@ function insertTimelinePin(pin) {
     if (!token) { console.log('No account token, skipping Timeline pin'); return; }
 
     var xhr = new XMLHttpRequest();
-    var url = 'https://timeline-api.getpebble.com/v1/user/pins/' + pin.id;
+    var url = 'https://timeline-api.rebble.io/v1/user/pins/' + pin.id;
     xhr.open('PUT', url, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.setRequestHeader('X-User-Token', token);
