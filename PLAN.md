@@ -316,7 +316,7 @@ time_t med_list_next_dose_time(const MedEntry *med, time_t after);
 
 **Layout (round — chalk 180×180, gabbro 260×260):**
 - No action bar; pill canvas larger (72×72 for chalk, 100×100 for gabbro via `PBL_DISPLAY_WIDTH`)
-- Text layers below pill; enable `text_layer_enable_screen_text_flow_and_paging` on `PBL_ROUND`
+- Text layers below pill; call `text_layer_enable_screen_text_flow_and_paging(layer, 5)` on `PBL_ROUND` — **must be called after `layer_add_child`** or it silently does nothing
 
 **Pill drawing — `draw_pill(GContext, GPoint center, int r, PillShape, GColor)`:**
 | Shape | Drawing |
@@ -340,8 +340,11 @@ GPath objects created once in `window_load`, destroyed in `window_unload`.
 - After reveal or when `privacyMode` OFF: normal display, Select = Taken
 
 **Confirmation animation (Taken):**
-- `PropertyAnimation` slides pill canvas layer off bottom of screen (300ms, `AnimationCurveEaseIn`)
-- `animation_stopped` callback pops window without transition
+- `property_animation_create_layer_frame(layer, NULL, &to_rect)` — `NULL` from uses current frame
+- Retrieve base animation: `Animation *anim = property_animation_get_animation(prop_anim)`
+- Set on `anim`: duration 300ms, `AnimationCurveEaseIn`, `.stopped` handler
+- Stopped callback signature: `void cb(Animation *anim, bool finished, void *ctx)`
+- In stopped callback: `property_animation_destroy(prop_anim)` (**not** `animation_destroy`), then `window_stack_pop(false)`
 - All other actions (Snooze, Skip, Back): `window_stack_pop(true)` directly
 
 **Actions (all call `appmessage_send_action` then navigate):**
@@ -379,7 +382,7 @@ void notifications_schedule_snooze(void);    // persist snooze_t = now + snoozeM
    - Append up to 4 occurrences per med while `t ≤ now + 48h`: for interval advance `t += intervalHours*3600`; for fixed call `med_list_next_dose_time(med, t)` again
 3. Insertion-sort `candidates` by `dose_ts`
 4. Deduplicate by time (skip if same `dose_ts` as previous)
-5. Schedule first `min(8, count)` via `wakeup_schedule(t, WAKEUP_COOKIE_DOSE, false)`
+5. Schedule first `min(8, count)` via `wakeup_schedule(t, WAKEUP_COOKIE_DOSE, false)`; skip any slot where `id < 0` (e.g. `E_RANGE` for times within 60s of now, `E_OUT_OF_RESOURCES` at 8-slot limit)
 6. If snooze is pending (`persist_read_int(18) > now`) and `scheduled < 8`, also schedule the snooze wakeup
 
 **`notifications_handle_wakeup()` algorithm:**
