@@ -131,7 +131,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
         case SHAPE_OVAL: {
             int hw = r * 7 / 10;
             GRect rect = GRect(center.x - hw, center.y - r, hw * 2, r * 2);
-            graphics_fill_rect(ctx, rect, hw, GCornerAll);
+            graphics_fill_rect(ctx, rect, hw, GCornersAll);
             graphics_draw_round_rect(ctx, rect, hw);
             break;
         }
@@ -139,7 +139,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
         case SHAPE_OBLONG: {
             int hh = r / 2;
             GRect rect = GRect(center.x - r, center.y - hh, r * 2, hh * 2);
-            graphics_fill_rect(ctx, rect, hh, GCornerAll);
+            graphics_fill_rect(ctx, rect, hh, GCornersAll);
             graphics_draw_round_rect(ctx, rect, hh);
             break;
         }
