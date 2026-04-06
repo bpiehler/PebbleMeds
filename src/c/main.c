@@ -8,10 +8,10 @@
 // Launch reason handling
 // ---------------------------------------------------------------------------
 
-static void handle_wakeup_launch(void) {
+static void handle_wakeup_launch(WakeupId id, int32_t cookie) {
   // Called when app is launched by a wakeup event.
   // notifications.c will check which doses are due and fire alerts.
-  notifications_handle_wakeup();
+  notifications_handle_wakeup(id, cookie);
 }
 
 static void handle_timeline_launch(uint32_t launch_code) {
@@ -37,7 +37,7 @@ static void init(void) {
     WakeupId wakeup_id;
     int32_t wakeup_cookie;
     wakeup_get_launch_event(&wakeup_id, &wakeup_cookie);
-    handle_wakeup_launch();
+    handle_wakeup_launch(wakeup_id, wakeup_cookie);
   } else if (reason == APP_LAUNCH_TIMELINE_ACTION) {
     uint32_t launch_code = launch_get_args();
     handle_timeline_launch(launch_code);

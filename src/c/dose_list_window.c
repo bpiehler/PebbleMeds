@@ -17,50 +17,6 @@ static DoseRow  s_rows[MED_MAX];
 static uint8_t  s_row_count = 0;
 
 // ---------------------------------------------------------------------------
-// Next-dose calculation
-// ---------------------------------------------------------------------------
-
-static time_t next_dose_time(const MedEntry *med, time_t now) {
-    if (med->scheduleType == SCHEDULE_FIXED) {
-        // Compute midnight of today (DST-naive; acceptable for dose scheduling)
-        struct tm *t = localtime(&now);
-        time_t midnight = now - ((time_t)t->tm_hour * 3600
-                               + (time_t)t->tm_min  * 60
-                               + (time_t)t->tm_sec);
-        time_t best = 0;
-        for (uint8_t day = 0; day <= 1; day++) {
-            for (uint8_t i = 0; i < med->timeCount; i++) {
-                time_t ts = midnight
-                          + (time_t)day * 86400
-                          + (time_t)med->times[i].h * 3600
-                          + (time_t)med->times[i].m * 60;
-                if (ts > now && (best == 0 || ts < best)) best = ts;
-            }
-        }
-        return best ? best : now + 86400;
-
-    } else {
-        // Interval: timer runs from lastTakenTs, not from midnight
-        if (med->lastTakenTs > 0) {
-            time_t next = (time_t)med->lastTakenTs + (time_t)med->intervalHours * 3600;
-            while (next <= now) next += (time_t)med->intervalHours * 3600;
-            return next;
-        } else {
-            // First run: use startHour:startMinute today (or advance to next slot)
-            struct tm *t = localtime(&now);
-            time_t midnight = now - ((time_t)t->tm_hour * 3600
-                                   + (time_t)t->tm_min  * 60
-                                   + (time_t)t->tm_sec);
-            time_t start = midnight
-                         + (time_t)med->startHour   * 3600
-                         + (time_t)med->startMinute * 60;
-            while (start <= now) start += (time_t)med->intervalHours * 3600;
-            return start;
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Build and sort the dose row list
 // ---------------------------------------------------------------------------
 
@@ -73,7 +29,7 @@ static void build_rows(void) {
         MedEntry *med = med_list_get(i);
         if (!med) continue;
         s_rows[s_row_count].med_index = i;
-        s_rows[s_row_count].dose_time = next_dose_time(med, now);
+        s_rows[s_row_count].dose_time = med_list_next_dose_time(med, now);
         s_row_count++;
     }
 

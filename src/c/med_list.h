@@ -53,3 +53,4 @@ void         med_list_set_count(uint8_t count);
 void         med_list_set(uint8_t index, const MedEntry *entry);
 AppSettings *med_list_get_settings(void);
 void         med_list_save_settings(void);
+time_t       med_list_next_dose_time(const MedEntry *med, time_t after);

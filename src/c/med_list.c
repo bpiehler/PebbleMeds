@@ -59,3 +59,39 @@ AppSettings *med_list_get_settings(void) {
 void med_list_save_settings(void) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(AppSettings));
 }
+
+time_t med_list_next_dose_time(const MedEntry *med, time_t after) {
+    if (med->scheduleType == SCHEDULE_FIXED) {
+        struct tm *t = localtime(&after);
+        time_t midnight = after - ((time_t)t->tm_hour * 3600
+                                 + (time_t)t->tm_min  * 60
+                                 + (time_t)t->tm_sec);
+        time_t best = 0;
+        for (uint8_t day = 0; day <= 1; day++) {
+            for (uint8_t i = 0; i < med->timeCount; i++) {
+                time_t ts = midnight
+                          + (time_t)day * 86400
+                          + (time_t)med->times[i].h * 3600
+                          + (time_t)med->times[i].m * 60;
+                if (ts > after && (best == 0 || ts < best)) best = ts;
+            }
+        }
+        return best ? best : after + 86400;
+    } else {
+        if (med->lastTakenTs > 0) {
+            time_t next = (time_t)med->lastTakenTs + (time_t)med->intervalHours * 3600;
+            while (next <= after) next += (time_t)med->intervalHours * 3600;
+            return next;
+        } else {
+            struct tm *t = localtime(&after);
+            time_t midnight = after - ((time_t)t->tm_hour * 3600
+                                     + (time_t)t->tm_min  * 60
+                                     + (time_t)t->tm_sec);
+            time_t start = midnight
+                         + (time_t)med->startHour   * 3600
+                         + (time_t)med->startMinute * 60;
+            while (start <= after) start += (time_t)med->intervalHours * 3600;
+            return start;
+        }
+    }
+}

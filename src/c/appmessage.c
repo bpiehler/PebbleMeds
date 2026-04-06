@@ -7,13 +7,13 @@
 #include <stdlib.h>
 
 // AppMessage key IDs — must match appinfo.json appKeys.
-#define KEY_CONFIG_JSON  0
-#define KEY_CHUNK_INDEX  1
-#define KEY_CHUNK_TOTAL  2
-#define KEY_ACTION       3
-#define KEY_MED_INDEX    4
-#define KEY_DOSE_TS      5
-#define KEY_REQUEST_SYNC 6
+#define KEY_CONFIG_JSON  MESSAGE_KEY_ConfigJson
+#define KEY_CHUNK_INDEX  MESSAGE_KEY_ChunkIndex
+#define KEY_CHUNK_TOTAL  MESSAGE_KEY_ChunkTotal
+#define KEY_ACTION       MESSAGE_KEY_Action
+#define KEY_MED_INDEX    MESSAGE_KEY_MedIndex
+#define KEY_DOSE_TS      MESSAGE_KEY_DoseTs
+#define KEY_REQUEST_SYNC MESSAGE_KEY_RequestSync
 
 // Chunked JSON reassembly. 16 meds * ~200 bytes each + overhead.
 #define JSON_BUF_SIZE    3300
