@@ -151,9 +151,14 @@ Pebble.addEventListener('appmessage', function (e) {
 
 // ---------------------------------------------------------------------------
 // Timeline pins (logic lives in timeline.js)
+// Pebble's JS runtime does not support transitive requires, so we require
+// schedule here and pass getNextDoseTimes as a dependency.
 // ---------------------------------------------------------------------------
-var timeline       = require('./timeline');
-var pushTimelinePins = timeline.pushTimelinePins;
+var timeline         = require('./timeline');
+var schedule         = require('./schedule');
+var pushTimelinePins = function(cfg) {
+  timeline.pushTimelinePins(cfg, schedule.getNextDoseTimes);
+};
 
 
 // ---------------------------------------------------------------------------

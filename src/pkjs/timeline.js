@@ -5,9 +5,11 @@
 
 'use strict';
 
-var schedule = require('./schedule');
+// Note: no require('./schedule') here — Pebble's JS runtime does not support
+// transitive requires (require from within a required module). Instead,
+// getNextDoseTimes is injected by index.js as a parameter.
 
-function pushTimelinePins(cfg) {
+function pushTimelinePins(cfg, getNextDoseTimes) {
   if (!cfg || !cfg.meds || !cfg.meds.length) {
     console.log('Timeline: no meds in config, skipping');
     return;
@@ -19,7 +21,7 @@ function pushTimelinePins(cfg) {
   var pins       = [];
 
   cfg.meds.forEach(function (med, index) {
-    var doseTimes = schedule.getNextDoseTimes(med, now, horizon);
+    var doseTimes = getNextDoseTimes(med, now, horizon);
     console.log('Timeline: med ' + index + ' (' + med.name + ') has ' + doseTimes.length + ' doses in 48h');
     doseTimes.forEach(function (ts) {
       pins.push(buildPin(med, index, ts, privacyMode));
