@@ -80,4 +80,4 @@ function insertTimelinePin(pin) {
   });
 }
 
-module.exports = { pushTimelinePins: pushTimelinePins };
+exports.pushTimelinePins = pushTimelinePins;

@@ -54,8 +54,8 @@ function getIntervalTimes(med, fromTs, toTs) {
   return results;
 }
 
-module.exports = {
-  getNextDoseTimes: getNextDoseTimes,
-  getFixedTimes:    getFixedTimes,
-  getIntervalTimes: getIntervalTimes
-};
+// Use property-style exports — Pebble's JS runtime does not support
+// replacing module.exports with a new object (only exports.foo = bar works).
+exports.getNextDoseTimes = getNextDoseTimes;
+exports.getFixedTimes    = getFixedTimes;
+exports.getIntervalTimes = getIntervalTimes;
