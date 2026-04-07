@@ -223,58 +223,18 @@ function buildPin(med, index, ts, privacyMode) {
   };
 }
 
-function getTokenAndInsertPin(pin, token) {
-  if (!token) {
-    console.log('Timeline: no token available, skipping pin ' + pin.id);
-    return;
-  }
-  console.log('Timeline: pushing pin ' + pin.id + ' at ' + pin.time);
-  var xhr = new XMLHttpRequest();
-  var url = 'https://timeline-api.rebble.io/v1/user/pins/' + pin.id;
-  xhr.open('PUT', url, true);
-  xhr.setRequestHeader('Content-Type', 'application/json');
-  xhr.setRequestHeader('X-User-Token', token);
-  xhr.onload = function () {
-    if (xhr.status >= 200 && xhr.status < 300) {
-      console.log('Timeline: pin inserted OK — ' + pin.id);
-    } else {
-      console.log('Timeline: pin insert FAILED ' + xhr.status + ' — ' + xhr.responseText);
-    }
-  };
-  xhr.onerror = function () {
-    console.log('Timeline: network error inserting pin ' + pin.id);
-  };
-  xhr.send(JSON.stringify(pin));
-}
-
 function insertTimelinePin(pin) {
-  // Try getAccountToken first; fall back to getWatchToken if not available
-  // (Rebble Android does not implement getAccountToken)
+  // Use Pebble.insertTimelinePin() — added in Rebble app v1.0.6.8.
+  // This handles pin insertion locally without a web API call, which is
+  // necessary because remote timeline pins are not yet supported on this
+  // platform and getAccountToken/getWatchToken are not implemented.
   try {
-    Pebble.getAccountToken(function (token) {
-      if (token) {
-        console.log('Timeline: using account token');
-        getTokenAndInsertPin(pin, token);
-      } else {
-        console.log('Timeline: getAccountToken returned null, trying getWatchToken');
-        try {
-          Pebble.getWatchToken(function (wtoken) {
-            getTokenAndInsertPin(pin, wtoken);
-          });
-        } catch (e2) {
-          console.log('Timeline: getWatchToken also unavailable: ' + e2.message);
-        }
-      }
-    });
+    Pebble.insertTimelinePin(JSON.stringify(pin),
+      function () { console.log('Timeline: pin inserted OK — ' + pin.id); },
+      function (e) { console.log('Timeline: pin insert FAILED — ' + pin.id + ': ' + e); }
+    );
   } catch (e) {
-    console.log('Timeline: getAccountToken unavailable (' + e.message + '), trying getWatchToken');
-    try {
-      Pebble.getWatchToken(function (wtoken) {
-        getTokenAndInsertPin(pin, wtoken);
-      });
-    } catch (e2) {
-      console.log('Timeline: getWatchToken also unavailable: ' + e2.message);
-    }
+    console.log('Timeline: Pebble.insertTimelinePin unavailable: ' + e.message);
   }
 }
 
