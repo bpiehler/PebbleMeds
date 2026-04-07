@@ -8,17 +8,25 @@
 var schedule = require('./schedule');
 
 function pushTimelinePins(cfg) {
-  var now     = Math.floor(Date.now() / 1000);
-  var horizon = now + 48 * 3600;
-  var pins    = [];
+  if (!cfg || !cfg.meds || !cfg.meds.length) {
+    console.log('Timeline: no meds in config, skipping');
+    return;
+  }
+
+  var now        = Math.floor(Date.now() / 1000);
+  var horizon    = now + 48 * 3600;
+  var privacyMode = cfg.settings && cfg.settings.privacyMode;
+  var pins       = [];
 
   cfg.meds.forEach(function (med, index) {
     var doseTimes = schedule.getNextDoseTimes(med, now, horizon);
+    console.log('Timeline: med ' + index + ' (' + med.name + ') has ' + doseTimes.length + ' doses in 48h');
     doseTimes.forEach(function (ts) {
-      pins.push(buildPin(med, index, ts, cfg.settings.privacyMode));
+      pins.push(buildPin(med, index, ts, privacyMode));
     });
   });
 
+  console.log('Timeline: inserting ' + pins.length + ' pin(s)');
   pins.forEach(function (pin) {
     insertTimelinePin(pin);
   });
@@ -45,7 +53,11 @@ function buildPin(med, index, ts, privacyMode) {
 
 function insertTimelinePin(pin) {
   Pebble.getAccountToken(function (token) {
-    if (!token) { console.log('No account token, skipping Timeline pin'); return; }
+    if (!token) {
+      console.log('Timeline: no account token — make sure Rebble account is connected');
+      return;
+    }
+    console.log('Timeline: pushing pin ' + pin.id + ' at ' + pin.time);
 
     var xhr = new XMLHttpRequest();
     var url = 'https://timeline-api.rebble.io/v1/user/pins/' + pin.id;
@@ -54,10 +66,13 @@ function insertTimelinePin(pin) {
     xhr.setRequestHeader('X-User-Token', token);
     xhr.onload = function () {
       if (xhr.status >= 200 && xhr.status < 300) {
-        console.log('Pin inserted: ' + pin.id);
+        console.log('Timeline: pin inserted OK — ' + pin.id);
       } else {
-        console.log('Pin insert failed: ' + xhr.status + ' ' + xhr.responseText);
+        console.log('Timeline: pin insert FAILED ' + xhr.status + ' — ' + xhr.responseText);
       }
+    };
+    xhr.onerror = function () {
+      console.log('Timeline: network error inserting pin ' + pin.id);
     };
     xhr.send(JSON.stringify(pin));
   });
