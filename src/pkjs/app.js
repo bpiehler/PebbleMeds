@@ -34,7 +34,9 @@ Pebble.addEventListener('ready', function () {
   var cfg = loadConfig();
   if (cfg) {
     sendConfigToWatch(cfg);
-    pushTimelinePins(cfg);
+    try { pushTimelinePins(cfg); } catch (e) {
+      console.log('Timeline: pushTimelinePins failed: ' + e.message);
+    }
   }
 });
 
@@ -221,30 +223,59 @@ function buildPin(med, index, ts, privacyMode) {
   };
 }
 
-function insertTimelinePin(pin) {
-  Pebble.getAccountToken(function (token) {
-    if (!token) {
-      console.log('Timeline: no account token — make sure Rebble account is connected');
-      return;
+function getTokenAndInsertPin(pin, token) {
+  if (!token) {
+    console.log('Timeline: no token available, skipping pin ' + pin.id);
+    return;
+  }
+  console.log('Timeline: pushing pin ' + pin.id + ' at ' + pin.time);
+  var xhr = new XMLHttpRequest();
+  var url = 'https://timeline-api.rebble.io/v1/user/pins/' + pin.id;
+  xhr.open('PUT', url, true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.setRequestHeader('X-User-Token', token);
+  xhr.onload = function () {
+    if (xhr.status >= 200 && xhr.status < 300) {
+      console.log('Timeline: pin inserted OK — ' + pin.id);
+    } else {
+      console.log('Timeline: pin insert FAILED ' + xhr.status + ' — ' + xhr.responseText);
     }
-    console.log('Timeline: pushing pin ' + pin.id + ' at ' + pin.time);
-    var xhr = new XMLHttpRequest();
-    var url = 'https://timeline-api.rebble.io/v1/user/pins/' + pin.id;
-    xhr.open('PUT', url, true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.setRequestHeader('X-User-Token', token);
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        console.log('Timeline: pin inserted OK — ' + pin.id);
+  };
+  xhr.onerror = function () {
+    console.log('Timeline: network error inserting pin ' + pin.id);
+  };
+  xhr.send(JSON.stringify(pin));
+}
+
+function insertTimelinePin(pin) {
+  // Try getAccountToken first; fall back to getWatchToken if not available
+  // (Rebble Android does not implement getAccountToken)
+  try {
+    Pebble.getAccountToken(function (token) {
+      if (token) {
+        console.log('Timeline: using account token');
+        getTokenAndInsertPin(pin, token);
       } else {
-        console.log('Timeline: pin insert FAILED ' + xhr.status + ' — ' + xhr.responseText);
+        console.log('Timeline: getAccountToken returned null, trying getWatchToken');
+        try {
+          Pebble.getWatchToken(function (wtoken) {
+            getTokenAndInsertPin(pin, wtoken);
+          });
+        } catch (e2) {
+          console.log('Timeline: getWatchToken also unavailable: ' + e2.message);
+        }
       }
-    };
-    xhr.onerror = function () {
-      console.log('Timeline: network error inserting pin ' + pin.id);
-    };
-    xhr.send(JSON.stringify(pin));
-  });
+    });
+  } catch (e) {
+    console.log('Timeline: getAccountToken unavailable (' + e.message + '), trying getWatchToken');
+    try {
+      Pebble.getWatchToken(function (wtoken) {
+        getTokenAndInsertPin(pin, wtoken);
+      });
+    } catch (e2) {
+      console.log('Timeline: getWatchToken also unavailable: ' + e2.message);
+    }
+  }
 }
 
 function pushTimelinePins(cfg) {
