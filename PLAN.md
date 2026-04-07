@@ -432,18 +432,20 @@ Keeps all existing code unchanged; values stay 0–6; eliminates manual/auto dri
 
 ### Phase 3.5 — JS Scheduling Tests ✅
 - [x] Extract `getFixedTimes`, `getIntervalTimes`, `getNextDoseTimes` to `src/pkjs/schedule.js` (no Pebble deps, CommonJS exports)
-- [x] Update `index.js` to `require('./schedule')`
+- [x] Update `app.js` to `require('./schedule')` (via `timeline.js`)
 - [x] Add Jest as dev dependency; add `"test": "jest"` script to `package.json`
 - [x] Write `tests/schedule.test.js` — 22 cases covering fixed/interval schedules and edge cases; all passing
 
 ### Phase 4 — Timeline API, App Icon & Round 2 Polish ✅
-- [x] Fix Timeline bugs (done in commit): wrong API endpoint (`getpebble.com` → `rebble.io`), spurious `timelineSubscribe` calls removed, icon changed to `NOTIFICATION_REMINDER`
-- [x] Extract Timeline logic from `index.js` to `src/pkjs/timeline.js`; `index.js` requires it
+- [x] Fix Timeline bugs: wrong API endpoint (`getpebble.com` → `rebble.io`), spurious `timelineSubscribe` calls removed, icon changed to `NOTIFICATION_REMINDER`
+- [x] Extract Timeline logic to `src/pkjs/timeline.js`; `app.js` requires it; `timeline.js` requires `schedule.js`
 - [x] Pin metadata: confirmed privacy-mode title/body; `openWatchApp` + `launchCode` verified correct
-- [x] App icon: 25×25 PNG files in `resources/images/` (`app_icon~color.png`, `app_icon~bw.png`); registered with `"type": "bitmap", "menuIcon": true` in `appinfo.json` and `package.json`
+- [x] App icon: 25×25 PNG files in `resources/images/`; registered with `"type": "bitmap", "menuIcon": true` in `appinfo.json` and `package.json`
 - [x] Round 2 / gabbro layout: `PILL_R` now 32 for `PBL_DISPLAY_WIDTH >= 200` (gabbro 260px, emery 200px), 28 for chalk (PBL_ROUND 180px), 20 for 144px platforms
 - [x] gabbro touchscreen: no swipe API in C SDK — firmware maps touch→buttons automatically; no code change needed
 - [x] Adherence log: `dose_log.c/h` — 30-entry ring buffer at persist key 19; records Taken/Skipped/Snoozed actions from `detail_window.c`; flushed immediately on each record
+- [x] Timeline pin insertion working via `Pebble.insertTimelinePin()` local API
+- [x] Timeline tests: `tests/timeline.test.js` — 16 cases covering `buildPin` structure and `pushTimelinePins` behaviour; 38 total tests passing
 
 ---
 
@@ -462,3 +464,5 @@ Keeps all existing code unchanged; values stay 0–6; eliminates manual/auto dri
 | Notification grouping | Per-taker, 5-min window | Prevents vibration fatigue; keeps takers separate |
 | Pill shapes | C drawing primitives | No image assets needed; scales to all screen sizes |
 | Skip behavior | Stops snooze immediately | Skipping = intentional; no need to keep reminding |
+| CloudPebble JS mode | CommonJS (not concatenation) | Required for `require()` to work; entry point must be `app.js` |
+| Timeline insertion | `Pebble.insertTimelinePin()` | Remote timeline pins not yet supported on Rebble; `getAccountToken`/`getWatchToken` not implemented; local API added in Rebble app v1.0.6.8 |
