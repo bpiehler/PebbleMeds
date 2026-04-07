@@ -150,16 +150,122 @@ Pebble.addEventListener('appmessage', function (e) {
 });
 
 // ---------------------------------------------------------------------------
-// Timeline pins (logic lives in timeline.js)
-// Pebble's JS runtime does not support transitive requires, so we require
-// schedule here and pass getNextDoseTimes as a dependency.
+// Schedule calculations (inlined from schedule.js — Pebble's CommonJS
+// implementation does not reliably export from required modules at runtime;
+// schedule.js is kept as the canonical source for Jest tests only)
 // ---------------------------------------------------------------------------
-var timeline         = require('./timeline');
-var schedule         = require('./schedule');
-var pushTimelinePins = function(cfg) {
-  timeline.pushTimelinePins(cfg, schedule.getNextDoseTimes);
-};
 
+function getFixedTimes(med, fromTs, toTs) {
+  var results = [];
+  var date = new Date(fromTs * 1000);
+  for (var dayOffset = 0; dayOffset <= 2; dayOffset++) {
+    var d = new Date(date.getFullYear(), date.getMonth(), date.getDate() + dayOffset);
+    med.times.forEach(function (t) {
+      var ts = Math.floor(
+        new Date(d.getFullYear(), d.getMonth(), d.getDate(), t.h, t.m, 0).getTime() / 1000
+      );
+      if (ts >= fromTs && ts <= toTs) results.push(ts);
+    });
+  }
+  return results;
+}
+
+function getIntervalTimes(med, fromTs, toTs) {
+  var results = [];
+  var intervalSecs = med.intervalHours * 3600;
+  var base;
+  if (med.lastTakenTs && med.lastTakenTs > 0) {
+    base = med.lastTakenTs + intervalSecs;
+  } else {
+    var now = new Date(fromTs * 1000);
+    base = Math.floor(
+      new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+               med.startHour, med.startMinute, 0).getTime() / 1000
+    );
+    if (base < fromTs) base += intervalSecs;
+  }
+  var ts = base;
+  while (ts <= toTs) {
+    if (ts >= fromTs) results.push(ts);
+    ts += intervalSecs;
+  }
+  return results;
+}
+
+function getNextDoseTimes(med, fromTs, toTs) {
+  return med.scheduleType === 'fixed'
+    ? getFixedTimes(med, fromTs, toTs)
+    : getIntervalTimes(med, fromTs, toTs);
+}
+
+// ---------------------------------------------------------------------------
+// Timeline pins (inlined from timeline.js — same reason as above)
+// ---------------------------------------------------------------------------
+
+function buildPin(med, index, ts, privacyMode) {
+  var title = privacyMode ? 'Medication Due' : med.name;
+  var body  = privacyMode ? med.taker : (med.taker + (med.dose ? ' \u2014 ' + med.dose : ''));
+  return {
+    id: 'pebble-meds-' + index + '-' + ts,
+    time: new Date(ts * 1000).toISOString(),
+    layout: {
+      type: 'genericPin',
+      title: title,
+      body: body,
+      tinyIcon: 'system://images/NOTIFICATION_REMINDER'
+    },
+    actions: [
+      { title: 'Taken',  type: 'openWatchApp', launchCode: 1 },
+      { title: 'Snooze', type: 'openWatchApp', launchCode: 2 }
+    ]
+  };
+}
+
+function insertTimelinePin(pin) {
+  Pebble.getAccountToken(function (token) {
+    if (!token) {
+      console.log('Timeline: no account token — make sure Rebble account is connected');
+      return;
+    }
+    console.log('Timeline: pushing pin ' + pin.id + ' at ' + pin.time);
+    var xhr = new XMLHttpRequest();
+    var url = 'https://timeline-api.rebble.io/v1/user/pins/' + pin.id;
+    xhr.open('PUT', url, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('X-User-Token', token);
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        console.log('Timeline: pin inserted OK — ' + pin.id);
+      } else {
+        console.log('Timeline: pin insert FAILED ' + xhr.status + ' — ' + xhr.responseText);
+      }
+    };
+    xhr.onerror = function () {
+      console.log('Timeline: network error inserting pin ' + pin.id);
+    };
+    xhr.send(JSON.stringify(pin));
+  });
+}
+
+function pushTimelinePins(cfg) {
+  if (!cfg || !cfg.meds || !cfg.meds.length) {
+    console.log('Timeline: no meds in config, skipping');
+    return;
+  }
+  var now         = Math.floor(Date.now() / 1000);
+  var horizon     = now + 48 * 3600;
+  var privacyMode = cfg.settings && cfg.settings.privacyMode;
+  var pins        = [];
+  cfg.meds.forEach(function (med, index) {
+    var doseTimes = getNextDoseTimes(med, now, horizon);
+    console.log('Timeline: med ' + index + ' (' + med.name + ') has ' + doseTimes.length + ' doses in 48h');
+    doseTimes.forEach(function (ts) {
+      pins.push(buildPin(med, index, ts, privacyMode));
+    });
+  });
+  console.log('Timeline: inserting ' + pins.length + ' pin(s)');
+  pins.forEach(function (pin) { insertTimelinePin(pin); });
+}
 
 // ---------------------------------------------------------------------------
 // Persistence (localStorage)
