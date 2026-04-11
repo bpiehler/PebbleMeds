@@ -25,7 +25,10 @@
         "name": "IMAGE_APP_ICON",
         "file": "images/app_icon.png",
         "menuIcon": true
-      }
+      },
+      { "type": "bitmap", "name": "IMAGE_ICON_TAKEN",  "file": "images/icon_taken.png"  },
+      { "type": "bitmap", "name": "IMAGE_ICON_SNOOZE", "file": "images/icon_snooze.png" },
+      { "type": "bitmap", "name": "IMAGE_ICON_SKIP",   "file": "images/icon_skip.png"   }
     ]
   },
   "capabilities": ["configurable", "timeline_enabled"]

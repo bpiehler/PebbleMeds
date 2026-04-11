@@ -244,7 +244,7 @@ PebbleMeds/
 │       ├── notifications.c/h # Wakeup scheduling, grouping logic, snooze (key 18)
 │       ├── dose_log.c/h      # Ring-buffer adherence log (key 19, 30 entries)
 │       └── pkjs/
-│           ├── index.js      # PebbleKit JS: config, AppMessage, wakeup sync
+│           ├── app.js        # PebbleKit JS: config, AppMessage, wakeup sync
 │           ├── schedule.js   # Pure scheduling functions (also used by tests)
 │           ├── timeline.js   # Timeline pin management
 │           └── config.html   # HTML configuration page
@@ -446,6 +446,21 @@ Keeps all existing code unchanged; values stay 0–6; eliminates manual/auto dri
 - [x] Adherence log: `dose_log.c/h` — 30-entry ring buffer at persist key 19; records Taken/Skipped/Snoozed actions from `detail_window.c`; flushed immediately on each record
 - [x] Timeline pin insertion working via `Pebble.insertTimelinePin()` local API
 - [x] Timeline tests: `tests/timeline.test.js` — 16 cases covering `buildPin` structure and `pushTimelinePins` behaviour; 38 total tests passing
+
+### Phase 5 — UI Polish ✅
+
+- [x] **Taker smart dropdown** (`config.html`): replaced free-text taker field with a `<select>` populated from `knownTakers` (persisted in `settings.knownTakers`, defaults to `["Self"]`). "Add person…" option appends new names permanently. `package.json` JS entry point corrected from `index.js` → `app.js`.
+- [x] **Action bar icons** (`detail_window.c`): replaced text hint line with bitmap icons on `ActionBarLayer` (PBL_RECT) — ✓ checkmark (Taken/Select), Z (Snooze/Up), × (Skip/Down). Icons generated as 18×18 grayscale PNGs; registered in `appinfo.json` and `package.json`.
+- [x] **Larger text in detail view**: name font upgraded to `GOTHIC_24_BOLD`, taker to `GOTHIC_18_BOLD`, dose to `GOTHIC_14_BOLD`.
+- [x] **Dose time label**: new `s_time_layer` shows "Due: HH:MM [AM/PM]" beneath the dose amount, using `clock_is_24h_style()`.
+- [x] **Med list header**: `dose_list_window.c` gains `get_num_sections`, `get_header_height`, and `draw_header` callbacks; header reads "Upcoming Doses".
+- [x] **Animations** (`detail_window.c`):
+  - *Entry*: pill drops in from above on `window_appear` (`AnimationCurveEaseOut`, 280 ms); fires only once per push (`s_entry_done` flag).
+  - *Taken*: existing slide-off-bottom retained; uses `layer_get_bounds` for display-height to work on all platforms.
+  - *Skip*: pill slides off the top of the screen (`AnimationCurveEaseIn`, 250 ms).
+  - *Snooze (wobble)*: 7-step `AppTimer` wobble (±8 → ±5 → ±3 → 0 px, 60 ms/step) before popping.
+  - All animations share `cancel_current_anim()` which pre-clears `s_prop_anim` before `animation_unschedule` to prevent double-free in stopped handlers.
+- [x] **Drop pill shape fix**: replaced 7-point `GPath` with 10-point version; added centre-bottom vertex `{0, PILL_R}` and extra intermediate side points to eliminate flat bottom and angular sides.
 
 ---
 

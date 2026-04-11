@@ -519,7 +519,9 @@
       <!-- Taker -->
       <div class="field">
         <label>Who takes this?</label>
-        <input type="text" id="f-taker" placeholder="e.g. Self, Murray, Lola" maxlength="24">
+        <select id="f-taker-select" onchange="onTakerChange()"></select>
+        <input type="text" id="f-taker-new" placeholder="Enter name…" maxlength="24"
+               style="display:none;margin-top:6px;">
       </div>
 
       <!-- Medication Name -->
@@ -665,8 +667,9 @@ var COLORS = [
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-var meds = [];          // Array of medication objects
-var editingIndex = -1;  // -1 = new med, >=0 = editing existing
+var meds = [];              // Array of medication objects
+var editingIndex = -1;      // -1 = new med, >=0 = editing existing
+var knownTakers = ["Self"]; // Persisted across sessions in settings.knownTakers
 
 // ---------------------------------------------------------------------------
 // Boot: load saved config
@@ -683,6 +686,9 @@ document.addEventListener("DOMContentLoaded", function () {
       meds = cfg.meds || [];
       document.getElementById("snooze-mins").value = cfg.settings.snoozeMins || 15;
       document.getElementById("privacy-mode").checked = cfg.settings.privacyMode || false;
+      if (cfg.settings.knownTakers && cfg.settings.knownTakers.length) {
+        knownTakers = cfg.settings.knownTakers;
+      }
     } catch (e) {
       meds = [];
     }
@@ -828,6 +834,52 @@ function deleteMed(index) {
 }
 
 // ---------------------------------------------------------------------------
+// Taker dropdown helpers
+// ---------------------------------------------------------------------------
+function populateTakerSelect(selectedTaker) {
+  var sel = document.getElementById("f-taker-select");
+  sel.innerHTML = "";
+
+  knownTakers.forEach(function (t) {
+    var opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    sel.appendChild(opt);
+  });
+
+  var addOpt = document.createElement("option");
+  addOpt.value = "__new__";
+  addOpt.textContent = "+ Add person…";
+  sel.appendChild(addOpt);
+
+  // If the taker is known, select it; otherwise add it first.
+  if (!selectedTaker || selectedTaker === "") {
+    sel.value = "Self";
+  } else if (knownTakers.indexOf(selectedTaker) >= 0) {
+    sel.value = selectedTaker;
+  } else {
+    knownTakers.push(selectedTaker);
+    populateTakerSelect(selectedTaker);  // rebuild with new entry
+    return;
+  }
+
+  document.getElementById("f-taker-new").style.display = "none";
+  document.getElementById("f-taker-new").value = "";
+}
+
+function onTakerChange() {
+  var sel = document.getElementById("f-taker-select");
+  var newInput = document.getElementById("f-taker-new");
+  if (sel.value === "__new__") {
+    newInput.style.display = "block";
+    newInput.focus();
+  } else {
+    newInput.style.display = "none";
+    newInput.value = "";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Modal open / close
 // ---------------------------------------------------------------------------
 function openModal(index) {
@@ -837,7 +889,7 @@ function openModal(index) {
 
   if (index === -1) {
     // Defaults for new med
-    document.getElementById("f-taker").value = "";
+    populateTakerSelect("Self");
     document.getElementById("f-name").value = "";
     document.getElementById("f-dose").value = "";
     document.getElementById("sched-fixed").checked = true;
@@ -848,7 +900,7 @@ function openModal(index) {
     setTimes([{ h: 8, m: 0 }]);
   } else {
     var med = meds[index];
-    document.getElementById("f-taker").value = med.taker;
+    populateTakerSelect(med.taker);
     document.getElementById("f-name").value = med.name;
     document.getElementById("f-dose").value = med.dose || "";
 
@@ -952,14 +1004,23 @@ function getTimes() {
 // Save medication from modal
 // ---------------------------------------------------------------------------
 function saveMed() {
-  var taker = document.getElementById("f-taker").value.trim();
+  var takerSel = document.getElementById("f-taker-select").value;
+  var takerNew = document.getElementById("f-taker-new").value.trim();
+  var taker;
+  if (takerSel === "__new__") {
+    if (!takerNew) { alert("Please enter a name for the person taking this medication."); return; }
+    taker = takerNew;
+    if (knownTakers.indexOf(taker) < 0) knownTakers.push(taker);
+  } else {
+    taker = takerSel;
+  }
+
   var name  = document.getElementById("f-name").value.trim();
   var dose  = document.getElementById("f-dose").value.trim();
   var isFixed = document.getElementById("sched-fixed").checked;
   var shape = document.querySelector('input[name="pill-shape"]:checked').value;
   var color = document.querySelector('input[name="pill-color"]:checked').value;
 
-  if (!taker) { alert("Please enter who takes this medication."); return; }
   if (!name)  { alert("Please enter the medication name."); return; }
 
   var med = { taker: taker, name: name, dose: dose, shape: shape, color: color };
@@ -997,8 +1058,9 @@ function saveConfig() {
   var cfg = {
     meds: meds,
     settings: {
-      snoozeMins:  parseInt(document.getElementById("snooze-mins").value, 10) || 15,
-      privacyMode: document.getElementById("privacy-mode").checked
+      snoozeMins:   parseInt(document.getElementById("snooze-mins").value, 10) || 15,
+      privacyMode:  document.getElementById("privacy-mode").checked,
+      knownTakers:  knownTakers
     }
   };
 

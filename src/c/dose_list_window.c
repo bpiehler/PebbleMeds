@@ -85,6 +85,18 @@ static MenuLayer *s_menu_layer;
 // MenuLayer callbacks
 // ---------------------------------------------------------------------------
 
+static uint16_t get_num_sections(MenuLayer *layer, void *ctx) {
+    return 1;
+}
+
+static int16_t get_header_height(MenuLayer *layer, uint16_t section, void *ctx) {
+    return MENU_CELL_BASIC_HEADER_HEIGHT;
+}
+
+static void draw_header(GContext *ctx, const Layer *cell_layer, uint16_t section, void *ctx_data) {
+    menu_cell_basic_header_draw(ctx, cell_layer, "Upcoming Doses");
+}
+
 static uint16_t get_num_rows(MenuLayer *layer, uint16_t section, void *ctx) {
     return (s_row_count > 0) ? s_row_count : 1;
 }
@@ -141,10 +153,13 @@ static void window_load(Window *window) {
 
     s_menu_layer = menu_layer_create(bounds);
     menu_layer_set_callbacks(s_menu_layer, NULL, (MenuLayerCallbacks){
-        .get_num_rows    = get_num_rows,
-        .get_cell_height = get_cell_height,
-        .draw_row        = draw_row,
-        .select_click    = select_click,
+        .get_num_sections = get_num_sections,
+        .get_header_height = get_header_height,
+        .draw_header      = draw_header,
+        .get_num_rows     = get_num_rows,
+        .get_cell_height  = get_cell_height,
+        .draw_row         = draw_row,
+        .select_click     = select_click,
     });
     menu_layer_set_click_config_onto_window(s_menu_layer, window);
 
