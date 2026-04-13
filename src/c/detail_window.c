@@ -85,10 +85,14 @@ static uint8_t            s_wobble_step;
 
 static uint8_t            s_med_index;
 static time_t             s_dose_time;
+static DetailWindowMode   s_mode;
 static bool               s_revealed;
 static bool               s_action_taken;
 static bool               s_entry_done;     // prevents entry anim replaying
 static GRect              s_canvas_target_frame;
+
+// Forward declaration — avoids circular include with dose_list_window.h
+void dose_list_window_refresh(void);
 
 // ---------------------------------------------------------------------------
 // Text helpers
@@ -250,6 +254,7 @@ static void taken_anim_stopped(Animation *anim, bool finished, void *ctx) {
     s_prop_anim = NULL;
     property_animation_destroy(pa);
     notifications_schedule_wakeups();
+    if (s_mode == DETAIL_MODE_BROWSE) dose_list_window_refresh();
     window_stack_pop(false);
 }
 
@@ -260,6 +265,7 @@ static void skip_anim_stopped(Animation *anim, bool finished, void *ctx) {
     s_prop_anim = NULL;
     property_animation_destroy(pa);
     notifications_schedule_wakeups();
+    if (s_mode == DETAIL_MODE_BROWSE) dose_list_window_refresh();
     window_stack_pop(false);
 }
 
@@ -342,8 +348,10 @@ static void down_click(ClickRecognizerRef rec, void *ctx) {
 
 static void click_config_provider(void *ctx) {
     window_single_click_subscribe(BUTTON_ID_SELECT, select_click);
-    window_single_click_subscribe(BUTTON_ID_UP,     up_click);
-    window_single_click_subscribe(BUTTON_ID_DOWN,   down_click);
+    if (s_mode == DETAIL_MODE_ALERT) {
+        window_single_click_subscribe(BUTTON_ID_UP, up_click);
+    }
+    window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
 }
 
 // ---------------------------------------------------------------------------
@@ -360,10 +368,12 @@ static void hints_update_proc(Layer *layer, GContext *ctx) {
     int cy = bounds.size.h / 2;
     int rx = bounds.size.w;
 
-    // Snooze hint (Up) - "Z" (pushed further up and in)
-    graphics_draw_text(ctx, "Z", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                       GRect(rx - 54, cy - 82, 24, 24),
-                       GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
+    // Snooze hint (Up) — only in alert context
+    if (s_mode == DETAIL_MODE_ALERT) {
+        graphics_draw_text(ctx, "Z", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                           GRect(rx - 54, cy - 82, 24, 24),
+                           GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
+    }
 
     // Taken hint (Select) - Manual checkmark (pushed further in)
     GPoint p = GPoint(rx - 32, cy);
@@ -395,8 +405,10 @@ static void window_load(Window *window) {
     s_icon_snooze = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_ICON_SNOOZE);
     s_icon_skip   = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_ICON_SKIP);
     action_bar_layer_set_icon(s_action_bar, BUTTON_ID_SELECT, s_icon_taken);
-    action_bar_layer_set_icon(s_action_bar, BUTTON_ID_UP,     s_icon_snooze);
-    action_bar_layer_set_icon(s_action_bar, BUTTON_ID_DOWN,   s_icon_skip);
+    if (s_mode == DETAIL_MODE_ALERT) {
+        action_bar_layer_set_icon(s_action_bar, BUTTON_ID_UP, s_icon_snooze);
+    }
+    action_bar_layer_set_icon(s_action_bar, BUTTON_ID_DOWN, s_icon_skip);
     action_bar_layer_set_click_config_provider(s_action_bar, click_config_provider);
     action_bar_layer_add_to_window(s_action_bar, window);
     int content_w = bounds.size.w - ACTION_BAR_WIDTH;
@@ -475,8 +487,9 @@ static void window_unload(Window *window) {
     cancel_wobble();
     cancel_current_anim();
 
-    // Dismissed without an explicit action → implicit snooze.
-    if (!s_action_taken) {
+    // Dismissed without an explicit action in alert context → implicit snooze.
+    // In browse mode, dismissing with no action is harmless.
+    if (!s_action_taken && s_mode == DETAIL_MODE_ALERT) {
         dose_log_record(s_med_index, DOSE_SNOOZED, (uint32_t)s_dose_time);
         notifications_schedule_snooze();
     }
@@ -508,9 +521,10 @@ static void window_unload(Window *window) {
 // Public API
 // ---------------------------------------------------------------------------
 
-void detail_window_push(uint8_t med_index, time_t dose_time) {
+void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mode) {
     s_med_index    = med_index;
     s_dose_time    = dose_time;
+    s_mode         = mode;
     s_revealed     = false;
     s_action_taken = false;
     s_entry_done   = false;

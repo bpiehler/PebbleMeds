@@ -142,7 +142,7 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
 
     // Push detail window for first due dose.
     // Phase 4: implement per-taker group checklist for multiple simultaneous doses.
-    detail_window_push(due_indices[0], due_times[0]);
+    detail_window_push(due_indices[0], due_times[0], DETAIL_MODE_ALERT);
 
     // Reschedule remaining wakeups now that one has fired
     notifications_schedule_wakeups();

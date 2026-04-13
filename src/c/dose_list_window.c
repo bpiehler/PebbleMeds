@@ -227,7 +227,7 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
 
 static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
     if (s_row_count == 0) return;
-    detail_window_push(s_rows[index->row].med_index, s_rows[index->row].dose_time);
+    detail_window_push(s_rows[index->row].med_index, s_rows[index->row].dose_time, DETAIL_MODE_BROWSE);
 }
 
 // ---------------------------------------------------------------------------
