@@ -265,7 +265,7 @@ static void wobble_step_cb(void *ctx) {
     GRect frame = s_canvas_target_frame;
     frame.origin.x += WOBBLE_OFFSETS[s_wobble_step++];
     layer_set_frame(s_canvas_layer, frame);
-    s_wobble_timer = app_timer_register(60, wobble_step_cb, NULL);
+    s_wobble_timer = app_timer_register(40, wobble_step_cb, NULL);
 }
 
 // ---------------------------------------------------------------------------
@@ -293,7 +293,7 @@ static void select_click(ClickRecognizerRef rec, void *ctx) {
     to.origin.y = layer_get_bounds(window_get_root_layer(s_window)).size.h;
     s_prop_anim = property_animation_create_layer_frame(s_canvas_layer, NULL, &to);
     Animation *base = property_animation_get_animation(s_prop_anim);
-    animation_set_duration(base, 300);
+    animation_set_duration(base, 200);
     animation_set_curve(base, AnimationCurveEaseIn);
     animation_set_handlers(base, (AnimationHandlers){ .stopped = taken_anim_stopped }, NULL);
     animation_schedule(base);
@@ -324,7 +324,7 @@ static void down_click(ClickRecognizerRef rec, void *ctx) {
     to.origin.y = -(PILL_CANVAS_SIZE + 10);
     s_prop_anim = property_animation_create_layer_frame(s_canvas_layer, NULL, &to);
     Animation *base = property_animation_get_animation(s_prop_anim);
-    animation_set_duration(base, 250);
+    animation_set_duration(base, 200);
     animation_set_curve(base, AnimationCurveEaseIn);
     animation_set_handlers(base, (AnimationHandlers){ .stopped = skip_anim_stopped }, NULL);
     animation_schedule(base);
@@ -335,6 +335,23 @@ static void click_config_provider(void *ctx) {
     window_single_click_subscribe(BUTTON_ID_UP,     up_click);
     window_single_click_subscribe(BUTTON_ID_DOWN,   down_click);
 }
+
+// ---------------------------------------------------------------------------
+// Icon hints (Round devices)
+// ---------------------------------------------------------------------------
+#ifdef PBL_ROUND
+static void hints_update_proc(Layer *layer, GContext *ctx) {
+    GRect bounds = layer_get_bounds(layer);
+    graphics_context_set_fill_color(ctx, GColorDarkGray);
+
+    // Snooze hint (Up)
+    graphics_fill_circle(ctx, GPoint(bounds.size.w - 10, bounds.size.h / 2 - 40), 4);
+    // Taken hint (Select)
+    graphics_fill_circle(ctx, GPoint(bounds.size.w - 5, bounds.size.h / 2), 6);
+    // Skip hint (Down)
+    graphics_fill_circle(ctx, GPoint(bounds.size.w - 10, bounds.size.h / 2 + 40), 4);
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // Window lifecycle
@@ -364,9 +381,15 @@ static void window_load(Window *window) {
     int content_w = bounds.size.w;
 #endif
 
+#ifdef PBL_ROUND
+    Layer *hints_layer = layer_create(bounds);
+    layer_set_update_proc(hints_layer, hints_update_proc);
+    layer_add_child(root, hints_layer);
+#endif
+
     // Pill canvas — starts above screen; entry animation moves it into position.
     int pill_x = (content_w - PILL_CANVAS_SIZE) / 2;
-    int pill_y = 8;
+    int pill_y = 12;
     s_canvas_target_frame = GRect(pill_x, pill_y, PILL_CANVAS_SIZE, PILL_CANVAS_SIZE);
 
     GRect init_frame      = s_canvas_target_frame;
@@ -376,27 +399,27 @@ static void window_load(Window *window) {
     layer_add_child(root, s_canvas_layer);
 
     // Text layers — larger fonts for readability.
-    int text_y = pill_y + PILL_CANVAS_SIZE + 6;
-    int text_x = 4;
-    int text_w = content_w - 8;
+    int text_y = pill_y + PILL_CANVAS_SIZE + 4;
+    int text_x = PBL_IF_ROUND_ELSE(20, 4);
+    int text_w = content_w - PBL_IF_ROUND_ELSE(40, 8);
 
     s_name_layer = text_layer_create(GRect(text_x, text_y, text_w, 30));
     text_layer_set_font(s_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
     text_layer_set_text_alignment(s_name_layer, GTextAlignmentCenter);
     layer_add_child(root, text_layer_get_layer(s_name_layer));
 
-    s_taker_layer = text_layer_create(GRect(text_x, text_y + 32, text_w, 24));
+    s_taker_layer = text_layer_create(GRect(text_x, text_y + 30, text_w, 24));
     text_layer_set_font(s_taker_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
     text_layer_set_text_alignment(s_taker_layer, GTextAlignmentCenter);
     layer_add_child(root, text_layer_get_layer(s_taker_layer));
 
-    s_dose_layer = text_layer_create(GRect(text_x, text_y + 58, text_w, 20));
-    text_layer_set_font(s_dose_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD));
+    s_dose_layer = text_layer_create(GRect(text_x, text_y + 54, text_w, 24));
+    text_layer_set_font(s_dose_layer, fonts_get_system_font(FONT_KEY_LECO_20_BOLD_NUMBERS));
     text_layer_set_text_alignment(s_dose_layer, GTextAlignmentCenter);
     layer_add_child(root, text_layer_get_layer(s_dose_layer));
 
-    s_time_layer = text_layer_create(GRect(text_x, text_y + 80, text_w, 18));
-    text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    s_time_layer = text_layer_create(GRect(text_x, text_y + 80, text_w, 24));
+    text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
     text_layer_set_text_alignment(s_time_layer, GTextAlignmentCenter);
     layer_add_child(root, text_layer_get_layer(s_time_layer));
 
@@ -420,7 +443,7 @@ static void window_appear(Window *window) {
     s_prop_anim = property_animation_create_layer_frame(
         s_canvas_layer, &from_frame, &s_canvas_target_frame);
     Animation *base = property_animation_get_animation(s_prop_anim);
-    animation_set_duration(base, 280);
+    animation_set_duration(base, 200);
     animation_set_curve(base, AnimationCurveEaseOut);
     animation_set_handlers(base, (AnimationHandlers){ .stopped = entry_anim_stopped }, NULL);
     animation_schedule(base);
@@ -442,6 +465,9 @@ static void window_unload(Window *window) {
     if (s_icon_skip)   { gbitmap_destroy(s_icon_skip);   s_icon_skip   = NULL; }
     action_bar_layer_destroy(s_action_bar);
     s_action_bar = NULL;
+#endif
+#ifdef PBL_ROUND
+    if (s_hints_layer) { layer_destroy(s_hints_layer); s_hints_layer = NULL; }
 #endif
     layer_destroy(s_canvas_layer);
     text_layer_destroy(s_name_layer);

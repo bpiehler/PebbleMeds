@@ -80,6 +80,7 @@ static void format_dose_time(time_t ts, char *buf, size_t buflen) {
 
 static Window    *s_window;
 static MenuLayer *s_menu_layer;
+static TextLayer *s_empty_layer;
 
 // ---------------------------------------------------------------------------
 // MenuLayer callbacks
@@ -105,9 +106,69 @@ static int16_t get_cell_height(MenuLayer *layer, MenuIndex *index, void *ctx) {
     return 44;
 }
 
+static void draw_pill_mini(GContext *ctx, GRect bounds, PillShape shape, GColor color) {
+    GPoint center = grect_center_point(&bounds);
+    int r = 8; // Small radius for menu icon
+
+#ifdef PBL_COLOR
+    graphics_context_set_fill_color(ctx, color);
+#else
+    graphics_context_set_fill_color(ctx, GColorBlack);
+#endif
+    graphics_context_set_stroke_color(ctx, GColorBlack);
+    graphics_context_set_stroke_width(ctx, 1);
+
+    switch (shape) {
+        case SHAPE_ROUND:
+            graphics_fill_circle(ctx, center, r);
+            graphics_draw_circle(ctx, center, r);
+            break;
+        case SHAPE_OVAL: {
+            GRect rect = GRect(center.x - 6, center.y - 8, 12, 16);
+            graphics_fill_rect(ctx, rect, 6, GCornersAll);
+            graphics_draw_round_rect(ctx, rect, 6);
+            break;
+        }
+        case SHAPE_OBLONG: {
+            GRect rect = GRect(center.x - 8, center.y - 5, 16, 10);
+            graphics_fill_rect(ctx, rect, 5, GCornersAll);
+            graphics_draw_round_rect(ctx, rect, 5);
+            break;
+        }
+        case SHAPE_SHIELD: {
+            // Simple diamond/shield for mini view
+            GPathInfo path_info = {
+                .num_points = 4,
+                .points = (GPoint[]){{0, -r}, {r-2, 0}, {0, r}, {-(r-2), 0}}
+            };
+            GPath *path = gpath_create(&path_info);
+            gpath_move_to(path, center);
+            gpath_draw_filled(ctx, path);
+            gpath_draw_outline(ctx, path);
+            gpath_destroy(path);
+            break;
+        }
+        case SHAPE_DROP: {
+            // Simple triangle/drop for mini view
+            GPathInfo path_info = {
+                .num_points = 3,
+                .points = (GPoint[]){{0, -r}, {r-2, r}, {-(r-2), r}}
+            };
+            GPath *path = gpath_create(&path_info);
+            gpath_move_to(path, center);
+            gpath_draw_filled(ctx, path);
+            gpath_draw_outline(ctx, path);
+            gpath_destroy(path);
+            break;
+        }
+    }
+}
+
 static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, void *ctx_data) {
+    GRect bounds = layer_get_bounds(cell_layer);
+
     if (s_row_count == 0) {
-        menu_cell_basic_draw(ctx, cell_layer, "No Medications", "Configure via phone app", NULL);
+        menu_cell_basic_draw(ctx, cell_layer, "No Medications", "Set up on phone", NULL);
         return;
     }
 
@@ -116,18 +177,26 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
     if (!med) return;
 
     AppSettings *settings = med_list_get_settings();
+    bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
+
+    // Pill icon area
+    GRect pill_bounds = GRect(6, (bounds.size.h - 20) / 2, 20, 20);
+    draw_pill_mini(ctx, pill_bounds, med->shape, med->color);
+
+    // Text area
+    int text_x = 32;
+    int text_w = bounds.size.w - text_x - 4;
+
     char time_str[16];
     format_dose_time(row->dose_time, time_str, sizeof(time_str));
 
-    // Title: "HH:MM  Med Name" or privacy-mode placeholder
     char title[48];
     if (settings->privacyMode) {
-        snprintf(title, sizeof(title), "%s  Medication Due", time_str);
+        snprintf(title, sizeof(title), "%s  Due", time_str);
     } else {
         snprintf(title, sizeof(title), "%s  %s", time_str, med->name);
     }
 
-    // Subtitle: "Taker  Dose" (or just "Taker" in privacy mode)
     char subtitle[48];
     if (!settings->privacyMode && med->dose[0] != '\0') {
         snprintf(subtitle, sizeof(subtitle), "%s \xc2\xb7 %s", med->taker, med->dose);
@@ -135,7 +204,11 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
         snprintf(subtitle, sizeof(subtitle), "%s", med->taker);
     }
 
-    menu_cell_basic_draw(ctx, cell_layer, title, subtitle, NULL);
+    graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
+    graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                       GRect(text_x, 2, text_w, 20), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+    graphics_draw_text(ctx, subtitle, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                       GRect(text_x, 22, text_w, 16), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
 static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
@@ -170,11 +243,26 @@ static void window_load(Window *window) {
 
     build_rows();
     layer_add_child(root, menu_layer_get_layer(s_menu_layer));
+
+    // Empty state
+    s_empty_layer = text_layer_create(GRect(0, bounds.size.h / 2 - 30, bounds.size.w, 60));
+    text_layer_set_text(s_empty_layer, "No meds scheduled.\nUse the phone app!");
+    text_layer_set_font(s_empty_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+    text_layer_set_text_alignment(s_empty_layer, GTextAlignmentCenter);
+    layer_add_child(root, text_layer_get_layer(s_empty_layer));
+
+    if (s_row_count > 0) {
+        layer_set_hidden(text_layer_get_layer(s_empty_layer), true);
+    } else {
+        layer_set_hidden(menu_layer_get_layer(s_menu_layer), true);
+    }
 }
 
 static void window_unload(Window *window) {
     menu_layer_destroy(s_menu_layer);
     s_menu_layer = NULL;
+    text_layer_destroy(s_empty_layer);
+    s_empty_layer = NULL;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,5 +286,10 @@ void dose_list_window_refresh(void) {
     build_rows();
     if (s_menu_layer) {
         menu_layer_reload_data(s_menu_layer);
+        if (s_empty_layer) {
+            bool empty = (s_row_count == 0);
+            layer_set_hidden(menu_layer_get_layer(s_menu_layer), empty);
+            layer_set_hidden(text_layer_get_layer(s_empty_layer), !empty);
+        }
     }
 }
