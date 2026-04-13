@@ -73,6 +73,9 @@ static GBitmap           *s_icon_taken;
 static GBitmap           *s_icon_snooze;
 static GBitmap           *s_icon_skip;
 #endif
+#ifdef PBL_ROUND
+static Layer             *s_hints_layer;
+#endif
 
 static GPath             *s_shield_path;
 static GPath             *s_drop_path;

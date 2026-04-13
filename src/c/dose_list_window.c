@@ -190,14 +190,14 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
     char time_str[16];
     format_dose_time(row->dose_time, time_str, sizeof(time_str));
 
-    char title[48];
+    char title[64];
     if (settings->privacyMode) {
         snprintf(title, sizeof(title), "%s  Due", time_str);
     } else {
         snprintf(title, sizeof(title), "%s  %s", time_str, med->name);
     }
 
-    char subtitle[48];
+    char subtitle[64];
     if (!settings->privacyMode && med->dose[0] != '\0') {
         snprintf(subtitle, sizeof(subtitle), "%s \xc2\xb7 %s", med->taker, med->dose);
     } else {
