@@ -4,20 +4,20 @@
   "longName": "Pebble Meds",
   "companyName": "Britt Piehler",
   "versionLabel": "1.0",
-  "sdkVersion": "4",
+  "sdkVersion": "3",
   "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery", "flint", "gabbro"],
   "watchapp": {
     "watchface": false
   },
-  "messageKeys": [
-    "ConfigJson",
-    "ChunkIndex",
-    "ChunkTotal",
-    "Action",
-    "MedIndex",
-    "DoseTs",
-    "RequestSync"
-  ],
+  "appKeys": {
+    "ConfigJson": 0,
+    "ChunkIndex": 1,
+    "ChunkTotal": 2,
+    "Action": 3,
+    "MedIndex": 4,
+    "DoseTs": 5,
+    "RequestSync": 6
+  },
   "resources": {
     "media": [
       {
