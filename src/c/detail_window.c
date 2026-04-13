@@ -91,8 +91,9 @@ static bool               s_action_taken;
 static bool               s_entry_done;     // prevents entry anim replaying
 static GRect              s_canvas_target_frame;
 
-// Forward declaration — avoids circular include with dose_list_window.h
+// Forward declarations — avoids circular include with dose_list_window.h
 void dose_list_window_refresh(void);
+void dose_list_window_refresh_after(uint8_t med_index, time_t dose_time);
 
 // ---------------------------------------------------------------------------
 // Text helpers
@@ -254,7 +255,9 @@ static void taken_anim_stopped(Animation *anim, bool finished, void *ctx) {
     s_prop_anim = NULL;
     property_animation_destroy(pa);
     notifications_schedule_wakeups();
-    if (s_mode == DETAIL_MODE_BROWSE) dose_list_window_refresh();
+    if (s_mode == DETAIL_MODE_BROWSE) {
+        dose_list_window_refresh_after(s_med_index, s_dose_time);
+    }
     window_stack_pop(false);
 }
 
@@ -265,7 +268,9 @@ static void skip_anim_stopped(Animation *anim, bool finished, void *ctx) {
     s_prop_anim = NULL;
     property_animation_destroy(pa);
     notifications_schedule_wakeups();
-    if (s_mode == DETAIL_MODE_BROWSE) dose_list_window_refresh();
+    if (s_mode == DETAIL_MODE_BROWSE) {
+        dose_list_window_refresh_after(s_med_index, s_dose_time);
+    }
     window_stack_pop(false);
 }
 

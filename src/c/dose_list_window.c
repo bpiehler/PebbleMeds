@@ -20,7 +20,10 @@ static uint8_t  s_row_count = 0;
 // Build and sort the dose row list
 // ---------------------------------------------------------------------------
 
-static void build_rows(void) {
+// skip_med_index / skip_after: when non-zero, the search base for that med is
+// advanced to MAX(now, skip_after + 1) so a just-taken/skipped future dose
+// rolls forward to the next occurrence rather than re-appearing in the list.
+static void build_rows(uint8_t skip_med_index, time_t skip_after) {
     s_row_count = 0;
     time_t now = time(NULL);
     uint8_t count = med_list_count();
@@ -28,8 +31,12 @@ static void build_rows(void) {
     for (uint8_t i = 0; i < count; i++) {
         MedEntry *med = med_list_get(i);
         if (!med) continue;
+        time_t base = now;
+        if (skip_after > 0 && i == skip_med_index && skip_after >= now) {
+            base = skip_after + 1;
+        }
         s_rows[s_row_count].med_index = i;
-        s_rows[s_row_count].dose_time = med_list_next_dose_time(med, now);
+        s_rows[s_row_count].dose_time = med_list_next_dose_time(med, base);
         s_row_count++;
     }
 
@@ -255,7 +262,7 @@ static void window_load(Window *window) {
     menu_layer_set_highlight_colors(s_menu_layer, GColorCobaltBlue, GColorWhite);
 #endif
 
-    build_rows();
+    build_rows(0xFF, 0);
     layer_add_child(root, menu_layer_get_layer(s_menu_layer));
 
     // Empty state
@@ -294,10 +301,8 @@ void dose_list_window_push(void) {
     window_stack_push(s_window, true);
 }
 
-void dose_list_window_refresh(void) {
-    // Rebuild the sorted row list and tell the MenuLayer to redraw.
-    // Safe to call even if the window is not currently visible.
-    build_rows();
+static void apply_refresh(uint8_t skip_med_index, time_t skip_after) {
+    build_rows(skip_med_index, skip_after);
     if (s_menu_layer) {
         menu_layer_reload_data(s_menu_layer);
         if (s_empty_layer) {
@@ -306,4 +311,12 @@ void dose_list_window_refresh(void) {
             layer_set_hidden(text_layer_get_layer(s_empty_layer), !empty);
         }
     }
+}
+
+void dose_list_window_refresh(void) {
+    apply_refresh(0xFF, 0);
+}
+
+void dose_list_window_refresh_after(uint8_t med_index, time_t dose_time) {
+    apply_refresh(med_index, dose_time);
 }
