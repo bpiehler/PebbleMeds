@@ -307,6 +307,14 @@ static void select_click(ClickRecognizerRef rec, void *ctx) {
     s_action_taken = true;
     dose_log_record(s_med_index, DOSE_TAKEN, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "taken", (uint32_t)s_dose_time);
+
+    // Update lastTakenTs on the watch immediately so interval scheduling uses
+    // the actual taken time rather than waiting for the phone to sync it back.
+    MedEntry *med = med_list_get(s_med_index);
+    if (med && med->scheduleType == SCHEDULE_INTERVAL) {
+        med->lastTakenTs = (uint32_t)time(NULL);
+    }
+
     vibes_short_pulse();
 
     cancel_current_anim();

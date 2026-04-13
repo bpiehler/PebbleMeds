@@ -1,6 +1,7 @@
 #include "appmessage.h"
 #include "med_list.h"
 #include "dose_list_window.h"
+#include "notifications.h"
 #include "jsmn.h"
 #include <pebble.h>
 #include <string.h>
@@ -294,6 +295,7 @@ static void process_config_json(const char *json) {
 
     APP_LOG(APP_LOG_LEVEL_INFO, "Config applied: %d meds", new_count);
     dose_list_window_refresh();
+    notifications_schedule_wakeups();
 }
 
 // ---------------------------------------------------------------------------
