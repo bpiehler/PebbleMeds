@@ -353,20 +353,25 @@ static void click_config_provider(void *ctx) {
 static void hints_update_proc(Layer *layer, GContext *ctx) {
     GRect bounds = layer_get_bounds(layer);
     graphics_context_set_text_color(ctx, GColorDarkGray);
+    graphics_context_set_stroke_color(ctx, GColorDarkGray);
+    graphics_context_set_stroke_width(ctx, 3);
 
-    // Snooze hint (Up) - "Z"
-    graphics_draw_text(ctx, "Z", fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(bounds.size.w - 24, bounds.size.h / 2 - 48, 14, 14),
+    int cy = bounds.size.h / 2;
+    int rx = bounds.size.w;
+
+    // Snooze hint (Up) - "Z" (larger and further up/in)
+    graphics_draw_text(ctx, "Z", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                       GRect(rx - 38, cy - 74, 24, 24),
                        GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
 
-    // Taken hint (Select) - "✓"
-    graphics_draw_text(ctx, "\xc2\xbb", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                       GRect(bounds.size.w - 20, bounds.size.h / 2 - 12, 14, 20),
-                       GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
+    // Taken hint (Select) - Manual checkmark (further in)
+    GPoint p = GPoint(rx - 22, cy);
+    graphics_draw_line(ctx, GPoint(p.x - 10, p.y - 1), GPoint(p.x - 4, p.y + 6));
+    graphics_draw_line(ctx, GPoint(p.x - 4, p.y + 6), GPoint(p.x + 8, p.y - 10));
 
-    // Skip hint (Down) - "X"
-    graphics_draw_text(ctx, "X", fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(bounds.size.w - 24, bounds.size.h / 2 + 32, 14, 14),
+    // Skip hint (Down) - "X" (larger and further down/in)
+    graphics_draw_text(ctx, "X", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                       GRect(rx - 38, cy + 46, 24, 24),
                        GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
 }
 #endif
