@@ -66,13 +66,20 @@ void notifications_schedule_wakeups(void) {
 
     time_t now = time(NULL);
 
+    // Check for a pending snooze before filling dose slots so we can reserve
+    // a wakeup slot for it.  Without this, a full 8-slot dose schedule would
+    // silently drop the snooze when another med fires mid-snooze.
+    time_t snooze_t  = (time_t)persist_read_int(PERSIST_KEY_SNOOZE);
+    bool   has_snooze = (snooze_t > now);
+    uint8_t max_dose  = has_snooze ? 7 : 8;
+
     DoseEvent events[32];
     uint8_t   count = collect_dose_events(now, events, 32);
 
     uint8_t scheduled = 0;
     time_t  last_t    = 0;
 
-    for (uint8_t i = 0; i < count && scheduled < 8; i++) {
+    for (uint8_t i = 0; i < count && scheduled < max_dose; i++) {
         if (events[i].dose_ts == last_t) continue;  // deduplicate same-second slots
         WakeupId id = wakeup_schedule(events[i].dose_ts, WAKEUP_COOKIE_DOSE, false);
         if (id >= 0) {
@@ -82,9 +89,7 @@ void notifications_schedule_wakeups(void) {
         // id < 0: E_RANGE (< 60s away) or E_OUT_OF_RESOURCES — skip this slot
     }
 
-    // Re-add any pending snooze that's still in the future
-    time_t snooze_t = (time_t)persist_read_int(PERSIST_KEY_SNOOZE);
-    if (snooze_t > now && scheduled < 8) {
+    if (has_snooze) {
         wakeup_schedule(snooze_t, WAKEUP_COOKIE_SNOOZE, false);
     }
 }
