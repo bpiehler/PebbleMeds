@@ -6,8 +6,10 @@
 
 #define WAKEUP_COOKIE_DOSE    0
 #define WAKEUP_COOKIE_SNOOZE  1
-#define DUE_WINDOW_SECS       300   // 5-minute grouping window
+#define DUE_WINDOW_SECS       300   // 5-minute grouping window for regular dose wakeups
 #define PERSIST_KEY_SNOOZE    18    // int32 Unix timestamp; 0 = no pending snooze
+#define PERSIST_KEY_SNOOZE_MED  20  // uint8 med index of the snoozed dose
+#define PERSIST_KEY_SNOOZE_DOSE 21  // int32 Unix timestamp of the snoozed dose
 
 // ---------------------------------------------------------------------------
 // Dose event collection for wakeup scheduling
@@ -102,11 +104,17 @@ void notifications_schedule_wakeups(void) {
 // Public: snooze — persist the desired wakeup time then reschedule
 // ---------------------------------------------------------------------------
 
-void notifications_schedule_snooze(void) {
+void notifications_schedule_snooze(uint8_t med_index, time_t dose_time) {
     AppSettings *settings  = med_list_get_settings();
     uint16_t snooze_mins   = (settings->snoozeMins > 0) ? settings->snoozeMins : 15;
     time_t   snooze_t      = time(NULL) + (time_t)snooze_mins * 60;
-    persist_write_int(PERSIST_KEY_SNOOZE, (int32_t)snooze_t);
+    // Persist the wakeup time AND which dose was snoozed.  The wakeup handler
+    // uses med_index + dose_time directly rather than re-searching by window,
+    // so the reminder fires correctly regardless of how far past the dose time
+    // the snooze wakeup lands.
+    persist_write_int(PERSIST_KEY_SNOOZE,      (int32_t)snooze_t);
+    persist_write_int(PERSIST_KEY_SNOOZE_MED,  (int32_t)med_index);
+    persist_write_int(PERSIST_KEY_SNOOZE_DOSE, (int32_t)dose_time);
     notifications_schedule_wakeups();  // includes the snooze slot
 }
 
@@ -117,12 +125,28 @@ void notifications_schedule_snooze(void) {
 void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
     time_t now = time(NULL);
 
-    // Clear persisted snooze if it was a snooze wakeup that fired
     if (cookie == WAKEUP_COOKIE_SNOOZE) {
-        persist_write_int(PERSIST_KEY_SNOOZE, 0);
+        // Read which dose was snoozed, clear all snooze state, then re-show
+        // the reminder directly.  We do NOT re-search by time window here —
+        // the snooze fires snoozeMins after the original dose, which is outside
+        // DUE_WINDOW_SECS, so a window search would always return due_count==0
+        // and fall through to dose_list_window_push() instead of the alert.
+        uint8_t med_index = (uint8_t)persist_read_int(PERSIST_KEY_SNOOZE_MED);
+        time_t  dose_ts   = (time_t)persist_read_int(PERSIST_KEY_SNOOZE_DOSE);
+        persist_write_int(PERSIST_KEY_SNOOZE,      0);
+        persist_write_int(PERSIST_KEY_SNOOZE_MED,  0xFF);
+        persist_write_int(PERSIST_KEY_SNOOZE_DOSE, 0);
+        notifications_schedule_wakeups();
+        vibes_short_pulse();
+        if (med_list_get(med_index)) {
+            detail_window_push(med_index, dose_ts, DETAIL_MODE_ALERT);
+        } else {
+            dose_list_window_push();  // fallback: med was removed since snooze set
+        }
+        return;
     }
 
-    // Find all doses due within DUE_WINDOW_SECS of now
+    // Regular dose wakeup: find all doses due within DUE_WINDOW_SECS of now
     uint8_t due_count = 0;
     uint8_t due_indices[MED_MAX];
     time_t  due_times[MED_MAX];
@@ -148,12 +172,7 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
     }
 
     vibes_short_pulse();
-
-    // Push detail window for first due dose.
-    // Phase 4: implement per-taker group checklist for multiple simultaneous doses.
     detail_window_push(due_indices[0], due_times[0], DETAIL_MODE_ALERT);
-
-    // Reschedule remaining wakeups now that one has fired
     notifications_schedule_wakeups();
 }
 

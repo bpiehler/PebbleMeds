@@ -279,7 +279,7 @@ static void wobble_step_cb(void *ctx) {
     s_wobble_timer = NULL;
     if (s_wobble_step >= WOBBLE_STEPS) {
         layer_set_frame(s_canvas_layer, s_canvas_target_frame);
-        notifications_schedule_snooze();
+        notifications_schedule_snooze(s_med_index, s_dose_time);
         window_stack_pop(true);
         return;
     }
@@ -504,7 +504,7 @@ static void window_unload(Window *window) {
     // In browse mode, dismissing with no action is harmless.
     if (!s_action_taken && s_mode == DETAIL_MODE_ALERT) {
         dose_log_record(s_med_index, DOSE_SNOOZED, (uint32_t)s_dose_time);
-        notifications_schedule_snooze();
+        notifications_schedule_snooze(s_med_index, s_dose_time);
     }
 
 #ifdef PBL_RECT
