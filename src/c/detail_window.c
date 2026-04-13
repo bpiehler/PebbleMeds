@@ -356,17 +356,17 @@ static void hints_update_proc(Layer *layer, GContext *ctx) {
 
     // Snooze hint (Up) - "Z"
     graphics_draw_text(ctx, "Z", fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(bounds.size.w - 18, bounds.size.h / 2 - 48, 14, 14),
+                       GRect(bounds.size.w - 24, bounds.size.h / 2 - 48, 14, 14),
                        GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
 
     // Taken hint (Select) - "✓"
     graphics_draw_text(ctx, "\xc2\xbb", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                       GRect(bounds.size.w - 14, bounds.size.h / 2 - 12, 14, 20),
+                       GRect(bounds.size.w - 20, bounds.size.h / 2 - 12, 14, 20),
                        GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
 
     // Skip hint (Down) - "X"
     graphics_draw_text(ctx, "X", fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(bounds.size.w - 18, bounds.size.h / 2 + 32, 14, 14),
+                       GRect(bounds.size.w - 24, bounds.size.h / 2 + 32, 14, 14),
                        GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
 }
 #endif
