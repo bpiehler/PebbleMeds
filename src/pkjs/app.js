@@ -10,16 +10,15 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// AppMessage key IDs (automatically mapped from package.json)
+// AppMessage key IDs (must match appinfo.json appKeys)
 // ---------------------------------------------------------------------------
-var keys = Pebble.MessageKeys;
-var KEY_CONFIG_JSON  = keys.ConfigJson;
-var KEY_CHUNK_INDEX  = keys.ChunkIndex;
-var KEY_CHUNK_TOTAL  = keys.ChunkTotal;
-var KEY_ACTION       = keys.Action;
-var KEY_MED_INDEX    = keys.MedIndex;
-var KEY_DOSE_TS      = keys.DoseTs;
-var KEY_REQUEST_SYNC = keys.RequestSync;
+var KEY_CONFIG_JSON  = 0;
+var KEY_CHUNK_INDEX  = 1;
+var KEY_CHUNK_TOTAL  = 2;
+var KEY_ACTION       = 3;
+var KEY_MED_INDEX    = 4;
+var KEY_DOSE_TS      = 5;
+var KEY_REQUEST_SYNC = 6;
 
 // Max bytes per AppMessage chunk. Pebble's buffer is 8KB but we stay
 // conservative so the watch-side reassembly buffer stays small.
