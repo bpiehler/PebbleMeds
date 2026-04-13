@@ -15,11 +15,10 @@
   },
   "pebble": {
     "uuid": "d4e8a2f0-1b3c-4d5e-8f9a-0b1c2d3e4f5a",
-    "shortName": "PebbleMeds",
-    "longName": "Pebble Meds",
-    "companyName": "",
+    "displayName": "Pebble Meds",
+    "companyName": "Britt Piehler",
     "versionLabel": "1.0",
-    "sdkVersion": "4",
+    "sdkVersion": "3",
     "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery", "flint", "gabbro"],
     "watchapp": {
       "watchface": false
@@ -46,7 +45,6 @@
         { "type": "bitmap", "name": "IMAGE_ICON_SKIP",   "file": "images/icon_skip.png"   }
       ]
     },
-    "capabilities": ["configurable", "timeline_enabled"],
-    "js": "src/pkjs/app.js"
+    "capabilities": ["configurable", "timeline_enabled"]
   }
 }
