@@ -1,4 +1,5 @@
 #pragma once
+#include <pebble.h>
 
 void dose_list_window_push(void);
 void dose_list_window_refresh(void);
