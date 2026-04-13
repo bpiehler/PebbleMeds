@@ -117,16 +117,18 @@ static int16_t get_cell_height(MenuLayer *layer, MenuIndex *index, void *ctx) {
     return 44;
 }
 
-static void draw_pill_mini(GContext *ctx, GRect bounds, PillShape shape, GColor color) {
+static void draw_pill_mini(GContext *ctx, GRect bounds, PillShape shape, GColor color, bool highlighted) {
     GPoint center = grect_center_point(&bounds);
     int r = 8; // Small radius for menu icon
 
 #ifdef PBL_COLOR
     graphics_context_set_fill_color(ctx, color);
-#else
-    graphics_context_set_fill_color(ctx, GColorBlack);
-#endif
     graphics_context_set_stroke_color(ctx, GColorBlack);
+#else
+    GColor c = highlighted ? GColorWhite : GColorBlack;
+    graphics_context_set_fill_color(ctx, c);
+    graphics_context_set_stroke_color(ctx, c);
+#endif
     graphics_context_set_stroke_width(ctx, 1);
 
     switch (shape) {
@@ -197,7 +199,7 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
 
     // Pill icon area
     GRect pill_bounds = GRect(pill_x, (bounds.size.h - 20) / 2, 20, 20);
-    draw_pill_mini(ctx, pill_bounds, med->shape, med->color);
+    draw_pill_mini(ctx, pill_bounds, med->shape, med->color, highlighted);
 
     char time_str[16];
     format_dose_time(row->dose_time, time_str, sizeof(time_str));
