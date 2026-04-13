@@ -2,6 +2,10 @@
 //
 // Pure functions with no Pebble runtime dependencies so they can be
 // required both by app.js (on-device) and by the Jest test suite.
+//
+// NOTE: This module mirrors med_list_next_dose_time() in src/c/med_list.c.
+// Keep the two in sync — any change to scheduling logic there must be
+// reflected here, and tests/schedule.test.js updated to match.
 
 'use strict';
 

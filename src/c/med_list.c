@@ -117,6 +117,10 @@ void med_list_save_settings(void) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(AppSettings));
 }
 
+// NOTE: This function has a pure-JS counterpart in src/pkjs/schedule.js
+// (getNextDoseTimes / getFixedTimes / getIntervalTimes).  Keep the two in
+// sync — any change to scheduling logic here must be reflected there, and
+// the Jest tests in tests/schedule.test.js updated to match.
 time_t med_list_next_dose_time(const MedEntry *med, time_t after) {
     struct tm t_after = *localtime(&after);
 
@@ -149,7 +153,18 @@ time_t med_list_next_dose_time(const MedEntry *med, time_t after) {
             }
             return occ;
         } else {
-            return (time_t)med->lastTakenTs + (med->intervalHours * 3600);
+            // Start from lastTakenTs + one interval, then advance by full
+            // intervals until we are strictly past 'after'.  Without this,
+            // a stale lastTakenTs (more than 4 intervals in the past) causes
+            // collect_dose_events to fill all 4 per-med slots with past
+            // occurrences and schedule nothing for this med.
+            time_t next = (time_t)med->lastTakenTs + (time_t)med->intervalHours * 3600;
+            if (next <= after) {
+                int seconds_since = (int)(after - next);
+                int intervals = (seconds_since / (med->intervalHours * 3600)) + 1;
+                next += intervals * (med->intervalHours * 3600);
+            }
+            return next;
         }
     }
 }

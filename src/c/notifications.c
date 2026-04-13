@@ -18,6 +18,10 @@ typedef struct {
     time_t  dose_ts;
 } DoseEvent;
 
+// NOTE: collect_dose_events() and notifications_schedule_wakeups() have a
+// pure-JS counterpart in src/pkjs/wakeups.js (collectDoseEvents / planWakeups).
+// Keep the two in sync — any change to slot-filling or snooze-reservation
+// logic here must be reflected there, and tests/wakeups.test.js updated.
 static uint8_t collect_dose_events(time_t now, DoseEvent *out, uint8_t max_out) {
     uint8_t count     = 0;
     uint8_t med_count = med_list_count();

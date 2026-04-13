@@ -1,7 +1,12 @@
 // PebbleMeds — wakeup slot planner
 //
-// Pure JS mirror of notifications_schedule_wakeups() in notifications.c.
-// No Pebble SDK dependencies — can be required by the test suite directly.
+// Pure JS mirror of collect_dose_events() + notifications_schedule_wakeups()
+// in src/c/notifications.c.  No Pebble SDK dependencies — imported by the
+// test suite directly.
+//
+// NOTE: Keep this file in sync with notifications.c.  Any change to
+// slot-filling, snooze-reservation, or per-med occurrence cap logic there
+// must be reflected here, and tests/wakeups.test.js updated to match.
 //
 // The Pebble platform limits apps to 8 simultaneous wakeup slots.
 // This module plans which slots to fill given the current med list and any
