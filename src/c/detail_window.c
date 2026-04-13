@@ -345,14 +345,22 @@ static void click_config_provider(void *ctx) {
 #ifdef PBL_ROUND
 static void hints_update_proc(Layer *layer, GContext *ctx) {
     GRect bounds = layer_get_bounds(layer);
-    graphics_context_set_fill_color(ctx, GColorDarkGray);
+    graphics_context_set_text_color(ctx, GColorDarkGray);
 
-    // Snooze hint (Up)
-    graphics_fill_circle(ctx, GPoint(bounds.size.w - 10, bounds.size.h / 2 - 40), 4);
-    // Taken hint (Select)
-    graphics_fill_circle(ctx, GPoint(bounds.size.w - 5, bounds.size.h / 2), 6);
-    // Skip hint (Down)
-    graphics_fill_circle(ctx, GPoint(bounds.size.w - 10, bounds.size.h / 2 + 40), 4);
+    // Snooze hint (Up) - "Z"
+    graphics_draw_text(ctx, "Z", fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(bounds.size.w - 18, bounds.size.h / 2 - 48, 14, 14),
+                       GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
+
+    // Taken hint (Select) - "✓"
+    graphics_draw_text(ctx, "\xc2\xbb", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                       GRect(bounds.size.w - 14, bounds.size.h / 2 - 12, 14, 20),
+                       GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
+
+    // Skip hint (Down) - "X"
+    graphics_draw_text(ctx, "X", fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(bounds.size.w - 18, bounds.size.h / 2 + 32, 14, 14),
+                       GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
 }
 #endif
 

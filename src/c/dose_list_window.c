@@ -91,11 +91,22 @@ static uint16_t get_num_sections(MenuLayer *layer, void *ctx) {
 }
 
 static int16_t get_header_height(MenuLayer *layer, uint16_t section, void *ctx) {
+#ifdef PBL_ROUND
+    return 34;
+#else
     return MENU_CELL_BASIC_HEADER_HEIGHT;
+#endif
 }
 
 static void draw_header(GContext *ctx, const Layer *cell_layer, uint16_t section, void *ctx_data) {
+    GRect bounds = layer_get_bounds(cell_layer);
+#ifdef PBL_ROUND
+    graphics_context_set_text_color(ctx, GColorBlack);
+    graphics_draw_text(ctx, "Upcoming Doses", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                       GRect(0, 4, bounds.size.w, 24), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+#else
     menu_cell_basic_header_draw(ctx, cell_layer, "Upcoming Doses");
+#endif
 }
 
 static uint16_t get_num_rows(MenuLayer *layer, uint16_t section, void *ctx) {
@@ -179,13 +190,14 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
     AppSettings *settings = med_list_get_settings();
     bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
 
-    // Pill icon area
-    GRect pill_bounds = GRect(6, (bounds.size.h - 20) / 2, 20, 20);
-    draw_pill_mini(ctx, pill_bounds, med->shape, med->color);
+    // Padding optimization for Round screen
+    int pill_x = PBL_IF_ROUND_ELSE(18, 6);
+    int text_x = pill_x + 26;
+    int text_w = bounds.size.w - text_x - PBL_IF_ROUND_ELSE(18, 4);
 
-    // Text area
-    int text_x = 32;
-    int text_w = bounds.size.w - text_x - 4;
+    // Pill icon area
+    GRect pill_bounds = GRect(pill_x, (bounds.size.h - 20) / 2, 20, 20);
+    draw_pill_mini(ctx, pill_bounds, med->shape, med->color);
 
     char time_str[16];
     format_dose_time(row->dose_time, time_str, sizeof(time_str));
