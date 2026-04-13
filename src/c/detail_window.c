@@ -353,8 +353,8 @@ static void click_config_provider(void *ctx) {
 static void hints_update_proc(Layer *layer, GContext *ctx) {
     GRect bounds = layer_get_bounds(layer);
     graphics_context_set_antialiased(ctx, true);
-    graphics_context_set_text_color(ctx, GColorDarkGray);
-    graphics_context_set_stroke_color(ctx, GColorDarkGray);
+    graphics_context_set_text_color(ctx, GColorBlack);
+    graphics_context_set_stroke_color(ctx, GColorBlack);
     graphics_context_set_stroke_width(ctx, 3);
 
     int cy = bounds.size.h / 2;
@@ -405,12 +405,6 @@ static void window_load(Window *window) {
     int content_w = bounds.size.w;
 #endif
 
-#ifdef PBL_ROUND
-    Layer *hints_layer = layer_create(bounds);
-    layer_set_update_proc(hints_layer, hints_update_proc);
-    layer_add_child(root, hints_layer);
-#endif
-
     // Pill canvas — starts above screen; entry animation moves it into position.
     int pill_x = (content_w - PILL_CANVAS_SIZE) / 2;
     int pill_y = 12;
@@ -452,6 +446,10 @@ static void window_load(Window *window) {
     text_layer_enable_screen_text_flow_and_paging(s_taker_layer, 5);
     text_layer_enable_screen_text_flow_and_paging(s_dose_layer,  5);
     text_layer_enable_screen_text_flow_and_paging(s_time_layer,  5);
+
+    s_hints_layer = layer_create(bounds);
+    layer_set_update_proc(s_hints_layer, hints_update_proc);
+    layer_add_child(root, s_hints_layer);
 #endif
 
     update_text();

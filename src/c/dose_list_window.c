@@ -102,8 +102,8 @@ static void draw_header(GContext *ctx, const Layer *cell_layer, uint16_t section
     GRect bounds = layer_get_bounds(cell_layer);
 #ifdef PBL_ROUND
     graphics_context_set_text_color(ctx, GColorBlack);
-    graphics_draw_text(ctx, "Upcoming Doses", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                       GRect(0, 4, bounds.size.w, 24), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    graphics_draw_text(ctx, "Upcoming Doses", fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+                       GRect(0, 0, bounds.size.w, 34), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 #else
     menu_cell_basic_header_draw(ctx, cell_layer, "Upcoming Doses");
 #endif
