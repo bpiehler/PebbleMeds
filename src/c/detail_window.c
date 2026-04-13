@@ -154,27 +154,28 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 
 #ifdef PBL_COLOR
     GColor fill = med->color;
-#else
-    graphics_context_set_fill_color(ctx, GColorBlack);
-    graphics_fill_rect(ctx, bounds, 0, GCornerNone);
-    GColor fill = GColorWhite;
-#endif
-
     graphics_context_set_fill_color(ctx, fill);
     graphics_context_set_stroke_color(ctx, GColorBlack);
+#else
+    graphics_context_set_stroke_color(ctx, GColorBlack);
+#endif
     graphics_context_set_stroke_width(ctx, 2);
 
     switch (med->shape) {
 
         case SHAPE_ROUND:
+#ifdef PBL_COLOR
             graphics_fill_circle(ctx, center, r);
+#endif
             graphics_draw_circle(ctx, center, r);
             break;
 
         case SHAPE_OVAL: {
             int hw = r * 7 / 10;
             GRect rect = GRect(center.x - hw, center.y - r, hw * 2, r * 2);
+#ifdef PBL_COLOR
             graphics_fill_rect(ctx, rect, hw, GCornersAll);
+#endif
             graphics_draw_round_rect(ctx, rect, hw);
             break;
         }
@@ -182,7 +183,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
         case SHAPE_OBLONG: {
             int hh = r / 2;
             GRect rect = GRect(center.x - r, center.y - hh, r * 2, hh * 2);
+#ifdef PBL_COLOR
             graphics_fill_rect(ctx, rect, hh, GCornersAll);
+#endif
             graphics_draw_round_rect(ctx, rect, hh);
             break;
         }
@@ -190,7 +193,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
         case SHAPE_SHIELD:
             if (s_shield_path) {
                 gpath_move_to(s_shield_path, center);
+#ifdef PBL_COLOR
                 gpath_draw_filled(ctx, s_shield_path);
+#endif
                 gpath_draw_outline(ctx, s_shield_path);
             }
             break;
@@ -198,7 +203,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
         case SHAPE_DROP:
             if (s_drop_path) {
                 gpath_move_to(s_drop_path, center);
+#ifdef PBL_COLOR
                 gpath_draw_filled(ctx, s_drop_path);
+#endif
                 gpath_draw_outline(ctx, s_drop_path);
             }
             break;
