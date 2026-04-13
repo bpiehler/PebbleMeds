@@ -3,6 +3,7 @@
 #include "dose_list_window.h"
 #include "jsmn.h"
 #include <pebble.h>
+#include "message_keys.auto.h"
 #include <string.h>
 #include <stdlib.h>
 
