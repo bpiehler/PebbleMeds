@@ -143,6 +143,15 @@ describe('getIntervalTimes', function () {
     expect(result[0]).toBe(ts(2025, 1, 15, 10, 30));
   });
 
+  test('without lastTakenTs: advances multiple intervals if many have passed since startHour', function () {
+    // NOW is 10am; startHour 02:00am today. 
+    // 4h interval: 02:00, 06:00, 10:00 (NOW), 14:00...
+    // result[0] should be 10:00 (NOW)
+    var med = { intervalHours: 4, lastTakenTs: 0, startHour: 2, startMinute: 0 };
+    var result = getIntervalTimes(med, NOW, WIN);
+    expect(result[0]).toBe(NOW);
+  });
+
   test('lastTakenTs far in the past: still yields correct first future dose', function () {
     // Took 3 days ago at 8am; 8h interval → doses every 8h, find next after NOW
     var oldTaken = ts(2025, 1, 12, 8, 0);

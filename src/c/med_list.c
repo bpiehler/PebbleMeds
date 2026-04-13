@@ -2,7 +2,7 @@
 #include <pebble.h>
 #include <string.h>
 
-#define TEST_MODE 1
+#define TEST_MODE 0
 
 // Persist key layout:
 //   0        = uint8  med count

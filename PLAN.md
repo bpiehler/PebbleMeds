@@ -462,6 +462,18 @@ Keeps all existing code unchanged; values stay 0–6; eliminates manual/auto dri
   - All animations share `cancel_current_anim()` which pre-clears `s_prop_anim` before `animation_unschedule` to prevent double-free in stopped handlers.
 - [x] **Drop pill shape fix**: replaced 7-point `GPath` with 10-point version; added centre-bottom vertex `{0, PILL_R}` and extra intermediate side points to eliminate flat bottom and angular sides.
 
+### Phase 6 — Display Polish & Platform Hardening ✅
+
+- [x] **Mini-pill icons in dose list** (`dose_list_window.c`): `draw_pill_mini()` draws the actual pill shape (round/oval/oblong/shield/drop, r=8) to the left of each row. Color platforms use the configured `GColor`; monochrome platforms use black outline, inverted to white when the row is highlighted.
+- [x] **Custom draw_row** (`dose_list_window.c`): replaced `menu_cell_basic_draw` with manual `graphics_draw_text` calls to control font sizes (`GOTHIC_18_BOLD` title, `GOTHIC_14` subtitle) and accommodate the pill icon. Row text truncated cleanly with `GTextOverflowModeFill`.
+- [x] **Empty-state layer** (`dose_list_window.c`): when no medications are configured, the `MenuLayer` is hidden and a centred `TextLayer` reads "No meds scheduled.\nUse the phone app!" — `dose_list_window_refresh()` toggles visibility correctly.
+- [x] **Round-device button hints** (`detail_window.c`, PBL_ROUND): `s_hints_layer` with `hints_update_proc` draws Z (Snooze/Up), a two-line checkmark (Taken/Select), and X (Skip/Down) as primitives aligned with the right-edge button positions. Added to layer tree *after* text layers so it renders on top.
+- [x] **Monochrome drawing fix** (`detail_window.c`): removed black-background fill on monochrome platforms; pill draws outline-only (white background shows through). Resolved invisible-pill issue on aplite/diorite/flint.
+- [x] **Round header height** (`dose_list_window.c`): custom 34 px header on PBL_ROUND using `GOTHIC_24_BOLD` centred, vs `MENU_CELL_BASIC_HEADER_HEIGHT` on rectangular.
+- [x] **Animation timing** (`detail_window.c`): entry, taken, and skip durations tightened to 200 ms; wobble step interval 40 ms — feels snappier on e-paper.
+- [x] **TEST_MODE scaffold** (`med_list.c`): `#define TEST_MODE 0/1` toggle loads 3 hardcoded meds (Multivitamin/Self, Apoquel/Murray, Ibuprofen/Self) for emulator-only testing without touching persistent storage. **Set to 0 before contest submission.**
+- [x] **Build stability**: reverted to `sdkVersion: "3"` and flat `appKeys` format in `appinfo.json` for CloudPebble SDK 3/4 compatibility; manual `#define KEY_*` constants kept in `appmessage.c`.
+
 ---
 
 ## Key Decisions Log
