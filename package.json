@@ -2,16 +2,21 @@
   "name": "pebble-meds",
   "version": "1.0.0",
   "author": "Britt Piehler",
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "scripts": {
     "test": "jest"
   },
   "main": "src/pkjs/app.js",
   "devDependencies": {
-    "jest": "^29.0.0"
+    "jest": "^29.0.0",
+    "pngjs": "^7.0.0"
   },
   "jest": {
-    "testMatch": ["**/tests/**/*.test.js"]
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ]
   },
   "pebble": {
     "uuid": "d4e8a2f0-1b3c-4d5e-8f9a-0b1c2d3e4f5a",
@@ -19,7 +24,15 @@
     "companyName": "Britt Piehler",
     "versionLabel": "1.0",
     "sdkVersion": "4",
-    "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery", "flint", "gabbro"],
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
     "watchapp": {
       "watchface": false
     },
@@ -40,11 +53,26 @@
           "file": "images/app_icon.png",
           "menuIcon": true
         },
-        { "type": "bitmap", "name": "IMAGE_ICON_TAKEN",  "file": "images/icon_taken.png"  },
-        { "type": "bitmap", "name": "IMAGE_ICON_SNOOZE", "file": "images/icon_snooze.png" },
-        { "type": "bitmap", "name": "IMAGE_ICON_SKIP",   "file": "images/icon_skip.png"   }
+        {
+          "type": "bitmap",
+          "name": "IMAGE_ICON_TAKEN",
+          "file": "images/icon_taken.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_ICON_SNOOZE",
+          "file": "images/icon_snooze.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_ICON_SKIP",
+          "file": "images/icon_skip.png"
+        }
       ]
     },
-    "capabilities": ["configurable", "timeline_enabled"]
+    "capabilities": [
+      "configurable",
+      "timeline_enabled"
+    ]
   }
 }

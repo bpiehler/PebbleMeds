@@ -381,21 +381,34 @@ static void hints_update_proc(Layer *layer, GContext *ctx) {
     int cy = bounds.size.h / 2;
     int rx = bounds.size.w;
 
+#if PBL_DISPLAY_WIDTH >= 200
+    // Gabbro (260×260): original hint positions
+    int x_inset = 54, x_check = 32, y_up = 82, y_down = 58;
+#else
+    // Chalk (180×180): tighter positions to stay within the smaller circle
+    int x_inset = 52, x_check = 28, y_up = 57, y_down = 40;
+#endif
+
     // Snooze hint (Up) — only in alert context
     if (s_mode == DETAIL_MODE_ALERT) {
         graphics_draw_text(ctx, "Z", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                           GRect(rx - 54, cy - 82, 24, 24),
+                           GRect(rx - x_inset, cy - y_up, 24, 24),
                            GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
     }
 
-    // Taken hint (Select) - Manual checkmark (pushed further in)
-    GPoint p = GPoint(rx - 32, cy);
+    // Taken hint (Select) — manual checkmark
+    GPoint p = GPoint(rx - x_check, cy);
+#if PBL_DISPLAY_WIDTH >= 200
     graphics_draw_line(ctx, GPoint(p.x - 10, p.y - 1), GPoint(p.x - 4, p.y + 6));
-    graphics_draw_line(ctx, GPoint(p.x - 4, p.y + 6), GPoint(p.x + 8, p.y - 10));
+    graphics_draw_line(ctx, GPoint(p.x - 4,  p.y + 6), GPoint(p.x + 8, p.y - 10));
+#else
+    graphics_draw_line(ctx, GPoint(p.x - 7, p.y),     GPoint(p.x - 3, p.y + 5));
+    graphics_draw_line(ctx, GPoint(p.x - 3, p.y + 5), GPoint(p.x + 5, p.y - 7));
+#endif
 
-    // Skip hint (Down) - "X" (pushed further down and in)
+    // Skip hint (Down) - "X"
     graphics_draw_text(ctx, "X", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                       GRect(rx - 54, cy + 58, 24, 24),
+                       GRect(rx - x_inset, cy + y_down, 24, 24),
                        GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
 }
 #endif
