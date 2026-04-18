@@ -15,16 +15,16 @@ def build(ctx):
     binaries = []
 
     cached_env = ctx.env
-    for p in ctx.env.TARGET_PLATFORMS:
-        ctx.set_env(ctx.all_envs[p])
+    for platform in ctx.env.TARGET_PLATFORMS:
+        ctx.env = ctx.all_envs[platform]
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
-        ctx.pebble_build_group(
-            sources=ctx.path.ant_glob('src/**/*.c'),
-            includes=['src/'],
-        )
-        binaries.append({'platform': p, 'app': app_elf, 'worker': None})
+        ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c'), target=app_elf, bin_type='app')
+        binaries.append({'platform': platform, 'app_elf': app_elf})
 
-    ctx.set_env(cached_env)
+    ctx.env = cached_env
+
     ctx.set_group('bundle')
-    ctx.pebble_bundle(binaries=binaries)
+    ctx.pbl_bundle(binaries=binaries,
+                   js=ctx.path.ant_glob('src/pkjs/**/*.js'),
+                   js_entry_file='src/pkjs/app.js')
