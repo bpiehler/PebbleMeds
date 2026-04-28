@@ -27,3 +27,5 @@ jobs:
 
       - name: Run opencode
         uses: anomalyco/opencode/github@latest
+        with:
+          model: opencode/big-pickle
