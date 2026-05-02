@@ -1,6 +1,6 @@
 {
   "name": "pebble-meds",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "author": "Britt Piehler",
   "keywords": [
     "pebble-app"
@@ -24,6 +24,7 @@
     "companyName": "Britt Piehler",
     "versionLabel": "1.0.0",
     "sdkVersion": "3",
+    "enableMultiJS": true,
     "targetPlatforms": [
       "aplite",
       "basalt",
