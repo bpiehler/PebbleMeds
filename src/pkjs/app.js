@@ -9,10 +9,14 @@
 
 'use strict';
 
+console.log('PebbleMeds JS starting');
+
 // ---------------------------------------------------------------------------
-// AppMessage key IDs — must match the values in build/js/message_keys.json.
-// We use extremely defensive lookups to prevent initialization crashes.
+// Constants and Globals
 // ---------------------------------------------------------------------------
+var CONFIG_URL = 'https://bpiehler.github.io/PebbleMeds/src/pkjs/config.html';
+var CHUNK_SIZE = 200;
+
 var KEY_CONFIG_JSON  = 10000;
 var KEY_CHUNK_INDEX  = 10001;
 var KEY_CHUNK_TOTAL  = 10002;
@@ -35,11 +39,8 @@ try {
   console.log('Error initializing message keys: ' + e.message);
 }
 
-// Max bytes per AppMessage chunk.
-var CHUNK_SIZE = 200;
-
 // ---------------------------------------------------------------------------
-// Persistence (localStorage)
+// Helpers
 // ---------------------------------------------------------------------------
 function saveConfig(cfg) {
   try {
@@ -80,11 +81,6 @@ function logDoseAction(action, medIndex, ts) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Configuration page URL
-// ---------------------------------------------------------------------------
-var CONFIG_URL = 'https://bpiehler.github.io/PebbleMeds/src/pkjs/config.html';
-
 function getConfigUrl() {
   try {
     var cfg = loadConfig();
@@ -97,9 +93,6 @@ function getConfigUrl() {
   return CONFIG_URL;
 }
 
-// ---------------------------------------------------------------------------
-// AppMessage: send config to watch (chunked)
-// ---------------------------------------------------------------------------
 function sendConfigToWatch(cfg) {
   try {
     var json = JSON.stringify(cfg);
@@ -142,9 +135,9 @@ Pebble.addEventListener('ready', function () {
     var cfg = loadConfig();
     if (cfg) {
       sendConfigToWatch(cfg);
-      var pushTimelinePins = require('./timeline').pushTimelinePins;
-      if (typeof pushTimelinePins === 'function') {
-        pushTimelinePins(cfg);
+      var timeline = require('./timeline');
+      if (timeline && timeline.pushTimelinePins) {
+        timeline.pushTimelinePins(cfg);
       }
     }
   } catch (e) {
@@ -153,7 +146,7 @@ Pebble.addEventListener('ready', function () {
 });
 
 Pebble.addEventListener('showConfiguration', function () {
-  console.log('showConfiguration called');
+  console.log('showConfiguration event');
   try {
     var url = getConfigUrl();
     console.log('Opening config URL: ' + url);
@@ -164,7 +157,7 @@ Pebble.addEventListener('showConfiguration', function () {
 });
 
 Pebble.addEventListener('webviewclosed', function (e) {
-  console.log('webviewclosed called');
+  console.log('webviewclosed event');
   if (!e.response || e.response === 'CANCELLED') return;
 
   var cfg;
@@ -183,17 +176,18 @@ Pebble.addEventListener('webviewclosed', function (e) {
     saveConfig(cfg);
     sendConfigToWatch(cfg);
     try {
-      var pushTimelinePins = require('./timeline').pushTimelinePins;
-      if (typeof pushTimelinePins === 'function') {
-        pushTimelinePins(cfg);
+      var timeline = require('./timeline');
+      if (timeline && timeline.pushTimelinePins) {
+        timeline.pushTimelinePins(cfg);
       }
     } catch (e) {
-      console.log('Timeline: pushTimelinePins failed: ' + e.message);
+      console.log('Timeline error: ' + e.message);
     }
   }
 });
 
 Pebble.addEventListener('appmessage', function (e) {
+  console.log('appmessage event');
   try {
     var msg = e.payload;
     if (msg.hasOwnProperty(KEY_REQUEST_SYNC)) {
@@ -206,6 +200,7 @@ Pebble.addEventListener('appmessage', function (e) {
       var action   = msg[KEY_ACTION];
       var medIndex = msg[KEY_MED_INDEX];
       var doseTs   = msg[KEY_DOSE_TS] || Math.floor(Date.now() / 1000);
+
       logDoseAction(action, medIndex, doseTs);
 
       if (action === 'taken') {
@@ -214,8 +209,12 @@ Pebble.addEventListener('appmessage', function (e) {
           cfg.meds[medIndex].lastTakenTs = doseTs;
           saveConfig(cfg);
           sendConfigToWatch(cfg);
-          var pushTimelinePins = require('./timeline').pushTimelinePins;
-          if (typeof pushTimelinePins === 'function') pushTimelinePins(cfg);
+          try {
+            var timeline = require('./timeline');
+            if (timeline && timeline.pushTimelinePins) {
+              timeline.pushTimelinePins(cfg);
+            }
+          } catch (e) {}
         }
       }
     }

@@ -1073,8 +1073,11 @@ function saveConfig() {
   // Pebble mobile app passes a 'return_to' query parameter containing the
   // correct redirect URL (e.g. pebblejs://close# for hardware, or a
   // localhost URL for the emulator).
-  var urlParams = new URLSearchParams(window.location.search);
-  var returnTo = urlParams.get('return_to') || 'pebblejs://close#';
+  var returnTo = "pebblejs://close#";
+  var match = location.search.match(/[?&]return_to=([^&]*)/);
+  if (match && match[1]) {
+    returnTo = decodeURIComponent(match[1]);
+  }
 
   // Send config back to the watch via the return URL
   var encoded = encodeURIComponent(JSON.stringify(cfg));
