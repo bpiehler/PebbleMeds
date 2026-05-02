@@ -684,10 +684,16 @@ document.addEventListener("DOMContentLoaded", function () {
     try {
       var cfg = JSON.parse(decodeURIComponent(hash));
       meds = cfg.meds || [];
-      document.getElementById("snooze-mins").value = cfg.settings.snoozeMins || 15;
-      document.getElementById("privacy-mode").checked = cfg.settings.privacyMode || false;
-      if (cfg.settings.knownTakers && cfg.settings.knownTakers.length) {
-        knownTakers = cfg.settings.knownTakers;
+      if (cfg.settings) {
+        if (cfg.settings.snoozeMins !== undefined) {
+          document.getElementById("snooze-mins").value = cfg.settings.snoozeMins;
+        }
+        if (cfg.settings.privacyMode !== undefined) {
+          document.getElementById("privacy-mode").checked = cfg.settings.privacyMode;
+        }
+        if (cfg.settings.knownTakers && cfg.settings.knownTakers.length) {
+          knownTakers = cfg.settings.knownTakers;
+        }
       }
     } catch (e) {
       meds = [];
@@ -1064,9 +1070,15 @@ function saveConfig() {
     }
   };
 
-  // Send config back to the watch via pebblejs URL scheme
+  // Pebble mobile app passes a 'return_to' query parameter containing the
+  // correct redirect URL (e.g. pebblejs://close# for hardware, or a
+  // localhost URL for the emulator).
+  var urlParams = new URLSearchParams(window.location.search);
+  var returnTo = urlParams.get('return_to') || 'pebblejs://close#';
+
+  // Send config back to the watch via the return URL
   var encoded = encodeURIComponent(JSON.stringify(cfg));
-  document.location = "pebblejs://close#" + encoded;
+  document.location = returnTo + encoded;
 }
 
 // ---------------------------------------------------------------------------
