@@ -27,7 +27,7 @@ typedef struct {
 static uint8_t collect_dose_events(time_t now, DoseEvent *out, uint8_t max_out) {
     uint8_t count     = 0;
     uint8_t med_count = med_list_count();
-    time_t  horizon   = now + 48 * 3600;
+    time_t  horizon   = now + 7 * 24 * 3600;
 
     for (uint8_t i = 0; i < med_count && count < max_out; i++) {
         MedEntry *med = med_list_get(i);

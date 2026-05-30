@@ -25,7 +25,7 @@ var COOKIE_SNOOZE = 1;
 var MAX_OCC_PER_MED = 4;
 
 // Platform constants
-var HORIZON_SECS   = 48 * 3600;  // only schedule within 48h
+var HORIZON_SECS   = 7 * 24 * 3600;  // 7-day horizon for weekly schedules
 var RANGE_MIN_SECS = 60;          // wakeup_schedule rejects times < 60s from now
 
 // ---------------------------------------------------------------------------
