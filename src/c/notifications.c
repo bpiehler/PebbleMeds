@@ -42,6 +42,7 @@ static uint8_t collect_dose_events(time_t now, DoseEvent *out, uint8_t max_out) 
             if (med->scheduleType == SCHEDULE_INTERVAL) {
                 t += (time_t)med->intervalHours * 3600;
             } else {
+                // FIXED and WEEKLY both advance by re-calling next_dose_time
                 t = med_list_next_dose_time(med, t);
             }
         }
