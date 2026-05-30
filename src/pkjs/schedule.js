@@ -12,6 +12,8 @@
 function getNextDoseTimes(med, fromTs, toTs) {
   if (med.scheduleType === 'fixed') {
     return getFixedTimes(med, fromTs, toTs);
+  } else if (med.scheduleType === 'weekly') {
+    return getWeeklyTimes(med, fromTs, toTs);
   } else {
     return getIntervalTimes(med, fromTs, toTs);
   }
@@ -58,8 +60,38 @@ function getIntervalTimes(med, fromTs, toTs) {
   return results;
 }
 
+function getWeeklyTimes(med, fromTs, toTs) {
+  var results = [];
+  if (!med.weekMask) return results;
+
+  var timeOfDay = med.times && med.times[0] ? med.times[0] : { h: 9, m: 0 };
+  var fromDate  = new Date(fromTs * 1000);
+
+  // Build the first candidate at time-of-day on the from date.
+  var candidate = new Date(
+    fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(),
+    timeOfDay.h, timeOfDay.m, 0
+  );
+
+  // Scan up to 7 days (covers one full week including wrap-around).
+  for (var d = 0; d < 7; d++) {
+    var dow = candidate.getDay();  // 0=Sunday
+    var ts  = Math.floor(candidate.getTime() / 1000);
+
+    if (ts >= fromTs && ts <= toTs && (med.weekMask & (1 << dow))) {
+      results.push(ts);
+    }
+
+    // Advance to same time next day.
+    candidate.setDate(candidate.getDate() + 1);
+  }
+
+  return results;
+}
+
 module.exports = {
   getNextDoseTimes: getNextDoseTimes,
   getFixedTimes:    getFixedTimes,
   getIntervalTimes: getIntervalTimes,
+  getWeeklyTimes:   getWeeklyTimes,
 };
