@@ -7,6 +7,7 @@
 typedef enum {
     SCHEDULE_FIXED    = 0,
     SCHEDULE_INTERVAL = 1,
+    SCHEDULE_WEEKLY   = 2,
 } ScheduleType;
 
 typedef struct {
@@ -35,6 +36,8 @@ typedef struct {
     uint8_t      startHour;
     uint8_t      startMinute;
     uint32_t     lastTakenTs;
+    // Weekly schedule: bitmask, bit 0=Sunday, bit 1=Monday, ... bit 6=Saturday
+    uint8_t      weekMask;
     // Visual
     PillShape    shape;
     GColor       color;
