@@ -158,7 +158,15 @@ static void parse_med_object(const char *js, size_t len, MedEntry *med) {
         } else if (jsmn_eq(js, key, "scheduleType")) {
             char buf[16];
             jsmn_str(js, val, buf, sizeof(buf));
-            med->scheduleType = (strcmp(buf, "interval") == 0) ? SCHEDULE_INTERVAL : SCHEDULE_FIXED;
+            if (strcmp(buf, "interval") == 0)
+                med->scheduleType = SCHEDULE_INTERVAL;
+            else if (strcmp(buf, "weekly") == 0)
+                med->scheduleType = SCHEDULE_WEEKLY;
+            else
+                med->scheduleType = SCHEDULE_FIXED;
+
+        } else if (jsmn_eq(js, key, "weekMask")) {
+            med->weekMask = (uint8_t)jsmn_toi(js, val);
 
         } else if (jsmn_eq(js, key, "intervalHours")) {
             med->intervalHours = (uint8_t)jsmn_toi(js, val);
