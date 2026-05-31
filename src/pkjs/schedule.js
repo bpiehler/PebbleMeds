@@ -21,10 +21,14 @@ function getNextDoseTimes(med, fromTs, toTs) {
 
 function getFixedTimes(med, fromTs, toTs) {
   var results = [];
-  var date = new Date(fromTs * 1000);
-  // Check today + next 2 days to cover any 48h window
-  for (var dayOffset = 0; dayOffset <= 2; dayOffset++) {
-    var d = new Date(date.getFullYear(), date.getMonth(), date.getDate() + dayOffset);
+  var fromDate = new Date(fromTs * 1000);
+  var toDate   = new Date(toTs * 1000);
+  // Normalize to start of day for each date.
+  var startDay = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+  var endDay   = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+  var days     = Math.floor((endDay.getTime() - startDay.getTime()) / 86400000) + 1;
+  for (var dayOffset = 0; dayOffset < days; dayOffset++) {
+    var d = new Date(startDay.getTime() + dayOffset * 86400000);
     med.times.forEach(function (t) {
       var ts = Math.floor(
         new Date(d.getFullYear(), d.getMonth(), d.getDate(), t.h, t.m, 0).getTime() / 1000

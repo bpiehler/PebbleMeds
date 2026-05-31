@@ -4,6 +4,7 @@ var schedule = require('../src/pkjs/schedule');
 var getFixedTimes    = schedule.getFixedTimes;
 var getIntervalTimes = schedule.getIntervalTimes;
 var getNextDoseTimes = schedule.getNextDoseTimes;
+var getWeeklyTimes   = schedule.getWeeklyTimes;
 
 // Build a Unix timestamp from LOCAL date/time components so tests are
 // timezone-agnostic (the scheduling functions also use local time).
@@ -14,6 +15,7 @@ function ts(year, month, day, hour, min) {
 // Reference "now": Jan 15 2025 10:00am local
 var NOW = ts(2025, 1, 15, 10, 0);
 var WIN = NOW + 48 * 3600;  // 48h window end
+var DAY = 24 * 3600;
 
 // ---------------------------------------------------------------------------
 // getFixedTimes
@@ -189,4 +191,110 @@ describe('getNextDoseTimes', function () {
     expect(getNextDoseTimes(med, NOW, narrowWin)).toEqual([]);
   });
 
+  test('routes weekly schedules to getWeeklyTimes', function () {
+    var med = {
+      scheduleType: 'weekly',
+      weekMask: 8,  // Wednesday
+      times: [{ h: 11, m: 0 }],
+    };
+    var result = getNextDoseTimes(med, NOW, WIN);
+    expect(result).toContain(ts(2025, 1, 15, 11, 0));  // Wednesday
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getWeeklyTimes
+// ---------------------------------------------------------------------------
+describe('getWeeklyTimes', function () {
+
+  var weeklyMed = function (h, m, weekMask) {
+    return {
+      scheduleType: 'weekly',
+      weekMask: weekMask,
+      times: [{ h: h, m: m }],
+    };
+  };
+
+  test('returns dose on an active day within the window', function () {
+    // Jan 15 2025 is a Wednesday (dow=3). weekMask 0b00001000 = Wednesday.
+    var med = weeklyMed(11, 0, 8);  // Wednesday 11am (after NOW=10am)
+    var result = getWeeklyTimes(med, NOW, WIN);
+    expect(result).toContain(ts(2025, 1, 15, 11, 0));
+  });
+
+  test('does not return dose on an inactive day', function () {
+    // Jan 15 2025 is Wednesday (dow=3). weekMask 0b00000100 = Tuesday (bit 2).
+    var med = weeklyMed(11, 0, 4);  // Tuesday only, 11am
+    var result = getWeeklyTimes(med, NOW, WIN);
+    expect(result).not.toContain(ts(2025, 1, 15, 11, 0));
+  });
+
+  test('returns next active day when today is inactive', function () {
+    // Wednesday Jan 15 is inactive (Tuesday mask = bit 2 = 4). Next Tuesday = Jan 21.
+    // Use a 7-day window so the next Tuesday is covered.
+    var longWin = NOW + 7 * DAY;
+    var med = weeklyMed(9, 0, 4);  // Tuesday (bit 2)
+    var result = getWeeklyTimes(med, NOW, longWin);
+    expect(result).toContain(ts(2025, 1, 21, 9, 0));
+    // Should NOT contain Wednesday Jan 15.
+    expect(result).not.toContain(ts(2025, 1, 15, 9, 0));
+  });
+
+  test('multi-day mask returns all matching days in window', function () {
+    // Mon (1), Wed (3), Fri (5): 0b00101010 = 42
+    // Jan 15 = Wed, Jan 17 = Fri, Jan 20 = Mon — all in 7-day window.
+    var longWin = NOW + 7 * DAY;
+    var med = weeklyMed(11, 0, 42);
+    var result = getWeeklyTimes(med, NOW, longWin);
+    expect(result).toContain(ts(2025, 1, 15, 11, 0));  // Wed
+    expect(result).toContain(ts(2025, 1, 17, 11, 0));  // Fri
+    expect(result).toContain(ts(2025, 1, 20, 11, 0));  // Mon
+  });
+
+  test('every day (all bits set) gives 7 doses in a week', function () {
+    var med = weeklyMed(11, 0, 0x7F);  // all 7 days, 11am
+    var weekEnd = NOW + 7 * DAY;
+    var result = getWeeklyTimes(med, NOW, weekEnd);
+    expect(result.length).toBe(7);
+  });
+
+  test('returns empty array when weekMask is 0', function () {
+    var med = weeklyMed(9, 0, 0);
+    expect(getWeeklyTimes(med, NOW, WIN)).toEqual([]);
+  });
+
+  test('dose exactly at fromTs is included', function () {
+    var at11am = ts(2025, 1, 15, 11, 0);
+    var med = weeklyMed(11, 0, 8);  // Wednesday 11am
+    expect(getWeeklyTimes(med, at11am, WIN)).toContain(at11am);
+  });
+
+  test('dose exactly at toTs is included', function () {
+    var at11am = ts(2025, 1, 15, 11, 0);
+    var med = weeklyMed(11, 0, 8);  // Wednesday 11am
+    expect(getWeeklyTimes(med, NOW, at11am)).toContain(at11am);
+  });
+
+  test('only doses after fromTs are returned', function () {
+    var med = weeklyMed(11, 0, 8);  // Wednesday 11am
+    var afterDose = ts(2025, 1, 15, 11, 1);  // 1 second after 11am Wed
+    var result = getWeeklyTimes(med, afterDose, WIN);
+    expect(result).not.toContain(ts(2025, 1, 15, 11, 0));
+  });
+
+  test('handles minute precision', function () {
+    var med = weeklyMed(14, 30, 8);  // Wednesday 2:30pm
+    var result = getWeeklyTimes(med, NOW, WIN);
+    expect(result).toContain(ts(2025, 1, 15, 14, 30));
+  });
+
+  test('wrap-around: all days before now skipped, next weekonday found', function () {
+    // Saturday Jan 18 at 11am. Monday mask (bit 1 = 2). Mon Jan 20 is in window.
+    var satNow = ts(2025, 1, 18, 11, 0);
+    var satEnd = satNow + 7 * DAY;
+    // Monday-only, 9am.
+    var med = weeklyMed(9, 0, 2);  // Monday (bit 1)
+    var result = getWeeklyTimes(med, satNow, satEnd);
+    expect(result).toContain(ts(2025, 1, 20, 9, 0));  // Next Monday
+  });
 });

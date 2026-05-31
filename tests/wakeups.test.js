@@ -246,11 +246,13 @@ describe('planWakeups - snooze slot reservation', function () {
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(0);
   });
 
-  test('pending snooze with fewer than 7 dose events → all doses + snooze', function () {
-    var meds = [fixedMed(12), fixedMed(15)];  // 2 doses today + 2 tomorrow = 4 total
+  test('pending snooze with many dose events gives 7 doses + 1 snooze', function () {
+    // With 7-day horizon and MAX_OCC_PER_MED=4, two fixed meds yield 8 dose events.
+    // planWakeups caps dose slots at 7 when snooze is pending, reserving slot 8 for snooze.
+    var meds = [fixedMed(12), fixedMed(15)];
     var snoozeTs = NOW + 15 * 60;
     var result = planWakeups(meds, NOW, snoozeTs);
-    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(4);
+    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(7);
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
     expect(result[result.length - 1]).toMatchObject({ ts: snoozeTs, type: 'snooze' });
   });
@@ -466,4 +468,56 @@ describe('planWakeups - real-world user scenarios', function () {
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
   });
 
+});
+
+// ---------------------------------------------------------------------------
+// planWakeups — weekly schedule
+// ---------------------------------------------------------------------------
+describe('planWakeups - weekly schedule', function () {
+
+  function weeklyMed(h, m, weekMask) {
+    return {
+      scheduleType: 'weekly',
+      weekMask: weekMask,
+      times: [{ h: h, m: m }],
+    };
+  }
+
+  test('single weekly med produces one wakeup on the active day', function () {
+    // Wednesday Jan 15, 11am is in the 7-day window and after NOW (10am).
+    var meds = [weeklyMed(11, 0, 8)];  // Wed only (bit 3)
+    var result = planWakeups(meds, NOW, 0);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].ts).toBe(ts(2025, 1, 15, 11, 0));
+    expect(result[0].type).toBe('dose');
+  });
+
+  test('weekly med with no active days produces no wakeups', function () {
+    var meds = [weeklyMed(9, 0, 0)];
+    expect(planWakeups(meds, NOW, 0)).toEqual([]);
+  });
+
+  test('weekly med on a far future day still appears within 7-day horizon', function () {
+    // Monday-only med; NOW is Wednesday → next Monday is 5 days away.
+    // 7-day horizon covers it.
+    var meds = [weeklyMed(9, 0, 2)];  // Monday only (bit 1)
+    var result = planWakeups(meds, NOW, 0);
+    expect(result.some(function (w) { return w.ts === ts(2025, 1, 20, 9, 0); })).toBe(true);
+  });
+
+  test('mixed weekly + fixed + interval schedules all coexist', function () {
+    var meds = [
+      weeklyMed(11, 0, 8),           // Wed 11am (after NOW=10am)
+      fixedMed([8, 20]),             // 8am+8pm daily
+      intervalMed(12, 9, 0),         // 12h from 9am
+    ];
+    var snoozeTs = NOW + 15 * 60;
+    var result = planWakeups(meds, NOW, snoozeTs);
+
+    expect(result.length).toBeLessThanOrEqual(8);
+    expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
+
+    // Weekly Wed 11am should appear
+    expect(result.some(function (w) { return w.ts === ts(2025, 1, 15, 11, 0); })).toBe(true);
+  });
 });
