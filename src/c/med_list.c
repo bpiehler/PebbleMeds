@@ -137,7 +137,7 @@ time_t med_list_next_dose_time(const MedEntry *med, time_t after) {
             if (best == 0 || occ < best) best = occ;
         }
         return best;
-    } else {
+    } else if (med->scheduleType == SCHEDULE_INTERVAL) {
         // Interval: lastTakenTs + hours (fallback to start time if lastTakenTs is 0)
         if (med->lastTakenTs == 0) {
             struct tm t = t_after;
