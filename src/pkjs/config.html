@@ -455,6 +455,27 @@
     font-weight: 600;
     cursor: pointer;
   }
+
+  .weekday-toggle {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: 1px solid #444;
+    background: #0f3460;
+    color: #aaa;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+
+  .weekday-toggle.active {
+    border-color: #e94560;
+    background: rgba(233,69,96,0.2);
+    color: #e94560;
+  }
 </style>
 </head>
 <body>
@@ -548,6 +569,10 @@
             <input type="radio" name="schedule-type" id="sched-interval" value="interval" onchange="onScheduleTypeChange()">
             <span>🔄 Interval</span>
           </label>
+          <label>
+            <input type="radio" name="schedule-type" id="sched-weekly" value="weekly" onchange="onScheduleTypeChange()">
+            <span>📅 Weekly</span>
+          </label>
         </div>
       </div>
 
@@ -580,6 +605,15 @@
         <div class="field-hint" style="background:rgba(233,69,96,0.08);border:1px solid #e9456033;border-radius:6px;padding:8px 10px;margin-top:4px;">
           ⏱ <strong>Important:</strong> The interval timer resets each time you mark a dose as <em>Taken</em> — not at midnight. For example, if you take an 8-hour medication at 9:00 am, your next reminder will be at 5:00 pm regardless of the start time.
         </div>
+      </div>
+
+      <!-- Weekly Panel -->
+      <div id="panel-weekly" class="field" style="display:none;">
+        <label>Days of Week</label>
+        <div class="weekday-grid" id="weekday-grid" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;"></div>
+        <label style="margin-top:10px;">Time of Day</label>
+        <input type="time" id="f-weekly-time" value="09:00" style="width:100%;padding:9px 12px;background:#0f3460;border:1px solid #444;border-radius:8px;color:#e0e0e0;font-size:14px;">
+        <div class="field-hint">The same time is used for all selected days. Create separate entries for different times or schedules.</div>
       </div>
 
       <!-- Shape -->
@@ -670,12 +704,15 @@ var COLORS = [
 var meds = [];              // Array of medication objects
 var editingIndex = -1;      // -1 = new med, >=0 = editing existing
 var knownTakers = ["Self"]; // Persisted across sessions in settings.knownTakers
+var WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+var weekMaskState = 0;
 
 // ---------------------------------------------------------------------------
 // Boot: load saved config
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", function () {
   buildColorGrid();
+  buildWeekdayGrid();
 
   // Initial config is passed as a URL fragment by index.js (localStorage
   // is not available inside data URI pages on Android).
@@ -744,6 +781,41 @@ function buildColorGrid() {
 // ---------------------------------------------------------------------------
 // Render medication list
 // ---------------------------------------------------------------------------
+function buildWeekdayGrid() {
+  var grid = document.getElementById("weekday-grid");
+  grid.innerHTML = "";
+  WEEKDAYS.forEach(function (label, i) {
+    var btn = document.createElement("div");
+    btn.className = "weekday-toggle";
+    btn.textContent = label;
+    btn.dataset.day = i;
+    btn.onclick = function () {
+      var bit = 1 << i;
+      if (weekMaskState & bit) {
+        weekMaskState &= ~bit;
+        btn.classList.remove("active");
+      } else {
+        weekMaskState |= bit;
+        btn.classList.add("active");
+      }
+    };
+    grid.appendChild(btn);
+  });
+}
+
+function setWeekMask(mask) {
+  weekMaskState = mask || 0;
+  var btns = document.querySelectorAll("#weekday-grid .weekday-toggle");
+  btns.forEach(function (btn) {
+    var day = parseInt(btn.dataset.day, 10);
+    if (weekMaskState & (1 << day)) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+}
+
 function renderMedList() {
   var list = document.getElementById("med-list");
   var countEl = document.getElementById("med-count");
@@ -801,6 +873,12 @@ function buildMedItem(med, index) {
     subParts.push(med.times.map(function (t) {
       return pad(t.h) + ":" + pad(t.m);
     }).join(", "));
+  } else if (med.scheduleType === "weekly") {
+    var dayNames = [];
+    WEEKDAYS.forEach(function (label, i) {
+      if (med.weekMask & (1 << i)) dayNames.push(label);
+    });
+    subParts.push(dayNames.join(", "));
   } else {
     subParts.push("Every " + med.intervalHours + "h");
   }
@@ -901,6 +979,8 @@ function openModal(index) {
     document.getElementById("sched-fixed").checked = true;
     document.getElementById("f-interval-hours").value = "8";
     document.getElementById("f-start-time").value = "08:00";
+    setWeekMask(0);
+    document.getElementById("f-weekly-time").value = "09:00";
     document.getElementById("shape-round").checked = true;
     document.querySelector('input[name="pill-color"]').checked = true;
     setTimes([{ h: 8, m: 0 }]);
@@ -914,6 +994,13 @@ function openModal(index) {
       document.getElementById("sched-interval").checked = true;
       document.getElementById("f-interval-hours").value = String(med.intervalHours);
       document.getElementById("f-start-time").value = pad(med.startHour) + ":" + pad(med.startMinute);
+    } else if (med.scheduleType === "weekly") {
+      document.getElementById("sched-weekly").checked = true;
+      setWeekMask(med.weekMask || 0);
+      document.getElementById("f-weekly-time").value =
+        (med.times && med.times.length > 0)
+          ? pad(med.times[0].h) + ":" + pad(med.times[0].m)
+          : "09:00";
     } else {
       document.getElementById("sched-fixed").checked = true;
       setTimes(med.times);
@@ -945,9 +1032,11 @@ document.getElementById("modal-overlay").addEventListener("click", function (e) 
 // Schedule type toggling
 // ---------------------------------------------------------------------------
 function onScheduleTypeChange() {
-  var isFixed = document.getElementById("sched-fixed").checked;
-  document.getElementById("panel-fixed").style.display = isFixed ? "block" : "none";
-  document.getElementById("panel-interval").style.display = isFixed ? "none" : "block";
+  var isFixed  = document.getElementById("sched-fixed").checked;
+  var isWeekly = document.getElementById("sched-weekly").checked;
+  document.getElementById("panel-fixed").style.display    = isFixed ? "block" : "none";
+  document.getElementById("panel-interval").style.display = (!isFixed && !isWeekly) ? "block" : "none";
+  document.getElementById("panel-weekly").style.display   = isWeekly ? "block" : "none";
 }
 
 // ---------------------------------------------------------------------------
@@ -1031,12 +1120,12 @@ function saveMed() {
 
   var med = { taker: taker, name: name, dose: dose, shape: shape, color: color };
 
-  if (isFixed) {
+  if (document.getElementById("sched-fixed").checked) {
     var times = getTimes();
     if (!times.length) { alert("Please add at least one time."); return; }
     med.scheduleType = "fixed";
     med.times = times;
-  } else {
+  } else if (document.getElementById("sched-interval").checked) {
     var startParts = document.getElementById("f-start-time").value.split(":");
     med.scheduleType  = "interval";
     med.intervalHours = parseInt(document.getElementById("f-interval-hours").value, 10);
@@ -1045,6 +1134,12 @@ function saveMed() {
     med.lastTakenTs   = (editingIndex >= 0 && meds[editingIndex].lastTakenTs)
                           ? meds[editingIndex].lastTakenTs
                           : 0;
+  } else {
+    if (!weekMaskState) { alert("Please select at least one day of the week."); return; }
+    var timeParts = document.getElementById("f-weekly-time").value.split(":");
+    med.scheduleType = "weekly";
+    med.weekMask     = weekMaskState;
+    med.times        = [{ h: parseInt(timeParts[0], 10), m: parseInt(timeParts[1], 10) }];
   }
 
   if (editingIndex === -1) {
