@@ -174,7 +174,6 @@ time_t med_list_next_dose_time(const MedEntry *med, time_t after) {
         t.tm_hour = med->times[0].h;
         t.tm_min  = med->times[0].m;
         t.tm_sec  = 0;
-        t.tm_isdst = -1;
         time_t occ = mktime(&t);
         if (occ <= after) occ += 86400;
         struct tm check = *localtime(&occ);
@@ -188,7 +187,6 @@ time_t med_list_next_dose_time(const MedEntry *med, time_t after) {
             check.tm_hour  = med->times[0].h;
             check.tm_min   = med->times[0].m;
             check.tm_sec   = 0;
-            check.tm_isdst = -1;
             mktime(&check);
         }
         return 0;

@@ -47,6 +47,23 @@ The JS mirrors are testable without a Pebble emulator.
 
 `gabbro` (Round 2 260×260), `chalk` (Time Round 180×180), `emery` (Time 2 200×228), `basalt` (Time 144×168), `aplite` (Classic 144×168), `diorite` (Pebble 2 144×168), `flint` (Pebble 2 Duo 144×168).
 
+## Backward Compatibility Rules
+
+### 1. Watch Persistent Storage (Binary Layout)
+
+The `MedEntry` struct is stored as raw binary blobs via `persist_write_data`/`persist_read_data` with `sizeof(MedEntry)`. **New fields must be appended at the END of the struct**, never inserted in the middle. Inserting a field shifts byte offsets of all subsequent fields, corrupting existing users' stored data on upgrade.
+
+- OK: add fields after `color`
+- NOT OK: insert fields between `lastTakenTs` and `shape` (done once, caused shape/color corruption mitigated by JSON sync)
+
+### 2. Config Page Backward Compatibility (GitHub Pages)
+
+The configuration page (`src/pkjs/config.html`) is served from GitHub Pages and is updated immediately on push. Users may not upgrade their watch app for hours or days. **The config page JSON output must remain parseable by the previous watch app version.**
+
+- New JSON keys (`weekMask`, new `scheduleType` values) are safe — the watch C parser silently ignores unknown keys and falls back to defaults for missing values
+- Changing/removing existing keys or their value formats would break old watch apps
+- Test: the JSON produced by the new config page must parse without error on the prior version's `parse_med_object`
+
 ## Gotchas
 
 ### Wakeup Fragility (mitigated by heartbeat)
