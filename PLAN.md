@@ -119,9 +119,10 @@ Logged to `localStorage` (phone) and `persist_write_data` (watch). Status: `"tak
 ### Wakeup Strategy
 Pebble allows max 8 scheduled wakeups at once. Strategy:
 1. Watch calculates upcoming doses from local med cache.
-2. Schedules next 8 wakeup slots.
-3. After each wakeup fires and is handled, schedules the next one.
-4. Phone JS syncs med list on app open + every 24 hours (keeps cache fresh).
+2. Schedules next 6-7 dose wakeup slots (1 always reserved for heartbeat safety net, +1 for snooze when pending).
+3. After each wakeup fires and is handled, schedules the next batch.
+4. A heartbeat wakeup fires every 6 hours as a safety net — if the chain breaks (crash, reboot), it rebuilds everything within 6 hours.
+5. Phone JS syncs med list on app open + whenever config changes (no periodic sync).
 
 ### Grouping Logic
 - If ≥2 medications due within a 5-minute window: fire a **single grouped notification**.
@@ -365,47 +366,58 @@ GPath objects created once in `window_load`, destroyed in `window_unload`.
 **Persist key layout** (extending med_list.c's layout):
 ```
 18 = int32  pending snooze Unix timestamp (0 = none)
+19 = DoseLogStore  ring-buffer adherence log (30 entries)
+20 = uint8  med index of snoozed dose
+21 = int32  Unix timestamp of snoozed dose
 ```
 
 **API additions to `notifications.h`:**
 ```c
 void notifications_handle_wakeup(WakeupId id, int32_t cookie);
 void notifications_handle_timeline_action(uint32_t launch_code);
-void notifications_schedule_wakeups(void);   // cancel-all + reschedule next ≤8 regular + any pending snooze
-void notifications_schedule_snooze(void);    // persist snooze_t = now + snoozeMins, then schedule_wakeups
+void notifications_schedule_wakeups(void);   // cancel-all + reschedule doses + snooze + heartbeat
+void notifications_schedule_snooze(uint8_t med_index, time_t dose_time);  // persist + reschedule
 ```
 `main.c` updated to pass `(wakeup_id, wakeup_cookie)` to `notifications_handle_wakeup`.
 
 **Wakeup cookie values:**
 ```c
-#define WAKEUP_COOKIE_DOSE   0
-#define WAKEUP_COOKIE_SNOOZE 1
+#define WAKEUP_COOKIE_DOSE      0
+#define WAKEUP_COOKIE_SNOOZE    1
+#define WAKEUP_COOKIE_HEARTBEAT 2
+#define HEARTBEAT_INTERVAL_SECS (6 * 3600)  // safety-net recovery window
 ```
 
 **`notifications_schedule_wakeups()` algorithm:**
 1. `wakeup_cancel_all()`
-2. Build `DoseEvent candidates[32]` by iterating all meds:
+2. If no meds configured, return early (nothing to schedule)
+3. Read snooze persist (key 18); if snooze_t > now, reserve 1 slot for it
+4. Build `DoseEvent candidates[32]` by iterating all meds:
    - `t = med_list_next_dose_time(med, now)`
-   - Append up to 4 occurrences per med while `t ≤ now + 48h`: for interval advance `t += intervalHours*3600`; for fixed call `med_list_next_dose_time(med, t)` again
-3. Insertion-sort `candidates` by `dose_ts`
-4. Deduplicate by time (skip if same `dose_ts` as previous)
-5. Schedule first `min(8, count)` via `wakeup_schedule(t, WAKEUP_COOKIE_DOSE, false)`; skip any slot where `id < 0` (e.g. `E_RANGE` for times within 60s of now, `E_OUT_OF_RESOURCES` at 8-slot limit)
-6. If snooze is pending (`persist_read_int(18) > now`) and `scheduled < 8`, also schedule the snooze wakeup
+   - Append up to 4 occurrences per med while `t ≤ now + 7 days`
+5. Insertion-sort `candidates` by `dose_ts`
+6. Deduplicate by time (skip if same `dose_ts` as previous)
+7. Schedule first `min(max_dose, count)` dose slots via `wakeup_schedule(t, WAKEUP_COOKIE_DOSE, false)`; skip any slot where `id < 0` (e.g. `E_RANGE` for times within 60s of now)
+   - `max_dose = has_snooze ? 6 : 7` (8 total - 1 heartbeat - 1 snooze if pending)
+8. If snooze pending, schedule snooze wakeup
+9. Always schedule heartbeat wakeup at `now + HEARTBEAT_INTERVAL_SECS`
 
 **`notifications_handle_wakeup()` algorithm:**
-1. If `cookie == WAKEUP_COOKIE_SNOOZE`: clear persisted snooze (`persist_write_int(18, 0)`)
-2. Find due doses: for each med, check `med_list_next_dose_time(med, now - DUE_WINDOW - 1)` ∈ `[now - DUE_WINDOW, now + 60]` (DUE_WINDOW = 300 s)
-3. Group due doses by `taker` string into `DueGroup[]` (max 8 groups)
-4. If 0 due: log warning, reschedule, open dose list
+1. If `cookie == WAKEUP_COOKIE_HEARTBEAT`: reschedule all wakeups, push dose list, return (no vibrate, no alert — silent recovery)
+2. If `cookie == WAKEUP_COOKIE_SNOOZE`: clear persisted snooze state (keys 18, 20, 21), reschedule, vibrate, push detail window for the snoozed dose
+3. For `WAKEUP_COOKIE_DOSE`: find due doses within `[now - DUE_WINDOW, now + 60]` (DUE_WINDOW = 300 s)
+4. If 0 due: log warning, reschedule, push dose list
 5. `vibes_short_pulse()`
-6. Push `detail_window` for the first due dose in the first group (Phase 4: full group checklist window for >1 med per taker)
+6. Push `detail_window` for the first due dose
 7. Reschedule wakeups after handling (accounts for new state)
 
 **`notifications_schedule_snooze()`:**
 ```c
 time_t snooze_t = time(NULL) + (time_t)settings->snoozeMins * 60;
-persist_write_int(18, (int32_t)snooze_t);
-notifications_schedule_wakeups();  // includes the snooze slot
+persist_write_int(PERSIST_KEY_SNOOZE,      (int32_t)snooze_t);
+persist_write_int(PERSIST_KEY_SNOOZE_MED,  (int32_t)med_index);
+persist_write_int(PERSIST_KEY_SNOOZE_DOSE, (int32_t)dose_time);
+notifications_schedule_wakeups();  // includes the snooze + heartbeat slots
 ```
 
 #### 3d. `appmessage.c` — switch to `MESSAGE_KEY_*`
@@ -485,7 +497,7 @@ Keeps all existing code unchanged; values stay 0–6; eliminates manual/auto dri
 | Round 2 features | `#ifdef` guards | Preserves backward compat, enables contest submission |
 | Interval reset | Resets on "Taken" action | More clinically accurate; shown clearly in config UI |
 | Privacy mode icon | Generic white pill | Colored icon could identify the specific medication |
-| Wakeup management | Self-rescheduling (next 8) | Works within Pebble's 8-wakeup limit |
+| Wakeup management | Self-rescheduling + heartbeat safety net | Works within Pebble's 8-wakeup limit; heartbeat recovers from crashes/reboots within 6 hours |
 | JSON transport | Chunked AppMessage (200B) | Stays within AppMessage limits; reassembled on watch |
 | Max medications | 16 | ~1280B of 4KB persistent storage; generous for real use |
 | Notification grouping | Per-taker, 5-min window | Prevents vibration fatigue; keeps takers separate |
