@@ -79,3 +79,7 @@ The LSP can't resolve `pebble.h` or Pebble SDK types. These are NOT real errors 
 ### CloudPebble Compatibility
 
 The app uses `sdkVersion: "3"` in `appinfo.json` and flat `appKeys` format for compatibility with both CloudPebble and modern Rebble SDK. Manual `#define KEY_*` constants in `appmessage.c` prevent drift.
+
+### DeepSeek/OpenRouter API Quirk
+
+When using DeepSeek models via OpenRouter, you may see: `"[DeepSeek] Function call should not be used with prefix"`. This is a DeepSeek API constraint — a content-free assistant message must separate reasoning output from tool calls. This is handled at the API client level and is not fixable from our side. The agent runtime automatically retries when this occurs.
