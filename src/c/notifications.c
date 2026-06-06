@@ -4,12 +4,14 @@
 #include "dose_list_window.h"
 #include <pebble.h>
 
-#define WAKEUP_COOKIE_DOSE    0
-#define WAKEUP_COOKIE_SNOOZE  1
-#define DUE_WINDOW_SECS       300   // 5-minute grouping window for regular dose wakeups
-#define PERSIST_KEY_SNOOZE    18    // int32 Unix timestamp; 0 = no pending snooze
-#define PERSIST_KEY_SNOOZE_MED  20  // uint8 med index of the snoozed dose
-#define PERSIST_KEY_SNOOZE_DOSE 21  // int32 Unix timestamp of the snoozed dose
+#define WAKEUP_COOKIE_DOSE      0
+#define WAKEUP_COOKIE_SNOOZE    1
+#define WAKEUP_COOKIE_HEARTBEAT 2
+#define DUE_WINDOW_SECS         300   // 5-minute grouping window for regular dose wakeups
+#define HEARTBEAT_INTERVAL_SECS (6 * 3600)  // safety-net recovery window
+#define PERSIST_KEY_SNOOZE      18
+#define PERSIST_KEY_SNOOZE_MED  20
+#define PERSIST_KEY_SNOOZE_DOSE 21
 
 // ---------------------------------------------------------------------------
 // Dose event collection for wakeup scheduling
@@ -74,11 +76,12 @@ void notifications_schedule_wakeups(void) {
     time_t now = time(NULL);
 
     // Check for a pending snooze before filling dose slots so we can reserve
-    // a wakeup slot for it.  Without this, a full 8-slot dose schedule would
-    // silently drop the snooze when another med fires mid-snooze.
+    // a wakeup slot for it.  Without this, a full dose schedule would silently
+    // drop the snooze when another med fires mid-snooze.
+    // One additional slot is always reserved for the heartbeat safety net.
     time_t snooze_t  = (time_t)persist_read_int(PERSIST_KEY_SNOOZE);
     bool   has_snooze = (snooze_t > now);
-    uint8_t max_dose  = has_snooze ? 7 : 8;
+    uint8_t max_dose  = has_snooze ? 6 : 7;  // 8 total - 1 heartbeat - (1 snooze?)
 
     DoseEvent events[32];
     uint8_t   count = collect_dose_events(now, events, 32);
@@ -99,6 +102,8 @@ void notifications_schedule_wakeups(void) {
     if (has_snooze) {
         wakeup_schedule(snooze_t, WAKEUP_COOKIE_SNOOZE, false);
     }
+
+    wakeup_schedule(now + HEARTBEAT_INTERVAL_SECS, WAKEUP_COOKIE_HEARTBEAT, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +130,12 @@ void notifications_schedule_snooze(uint8_t med_index, time_t dose_time) {
 
 void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
     time_t now = time(NULL);
+
+    if (cookie == WAKEUP_COOKIE_HEARTBEAT) {
+        notifications_schedule_wakeups();
+        dose_list_window_push();
+        return;
+    }
 
     if (cookie == WAKEUP_COOKIE_SNOOZE) {
         // Read which dose was snoozed, clear all snooze state, then re-show

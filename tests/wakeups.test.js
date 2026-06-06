@@ -1,11 +1,12 @@
 'use strict';
 
 var wakeups = require('../src/pkjs/wakeups');
-var planWakeups       = wakeups.planWakeups;
-var collectDoseEvents = wakeups.collectDoseEvents;
-var RANGE_MIN_SECS    = wakeups.RANGE_MIN_SECS;
-var MAX_OCC_PER_MED   = wakeups.MAX_OCC_PER_MED;
-var HORIZON_SECS      = wakeups.HORIZON_SECS;
+var planWakeups             = wakeups.planWakeups;
+var collectDoseEvents       = wakeups.collectDoseEvents;
+var RANGE_MIN_SECS          = wakeups.RANGE_MIN_SECS;
+var MAX_OCC_PER_MED         = wakeups.MAX_OCC_PER_MED;
+var HORIZON_SECS            = wakeups.HORIZON_SECS;
+var HEARTBEAT_INTERVAL_SECS = wakeups.HEARTBEAT_INTERVAL_SECS;
 
 // Build a Unix timestamp from LOCAL date/time components (timezone-agnostic).
 function ts(year, month, day, hour, min) {
@@ -112,11 +113,12 @@ describe('planWakeups - basic scheduling', function () {
     expect(result[0].ts).toBe(ts(2025, 1, 15, 12, 0));
   });
 
-  test('wakeups are sorted chronologically', function () {
+  test('wakeups are sorted chronologically (dose entries)', function () {
     var meds = [fixedMed(16), fixedMed(12), fixedMed(14)];
     var result = planWakeups(meds, NOW, 0);
-    for (var i = 1; i < result.length; i++) {
-      expect(result[i].ts).toBeGreaterThanOrEqual(result[i - 1].ts);
+    var doses = result.filter(function (w) { return w.type === 'dose'; });
+    for (var i = 1; i < doses.length; i++) {
+      expect(doses[i].ts).toBeGreaterThanOrEqual(doses[i - 1].ts);
     }
   });
 
@@ -164,8 +166,8 @@ describe('planWakeups - slot cap and near-miss filtering', function () {
     expect(result[0].ts).toBe(NOW + 61);
   });
 
-  test('near-miss dose does not consume a slot — later events still fill 8 slots', function () {
-    // One near-miss dose (NOW + 30s) + 8 future doses → all 8 future slots filled
+  test('near-miss dose does not consume a slot — later events still fill 7 dose slots', function () {
+    // One near-miss dose (NOW + 30s) + 8 future doses → 7 dose + 1 heartbeat = 8 total
     var meds = [
       { scheduleType: 'fixed', times: [{ h: 10, m: 0 }] },  // near-miss at NOW
     ];
@@ -174,17 +176,21 @@ describe('planWakeups - slot cap and near-miss filtering', function () {
 
     var result = planWakeups(meds, NOW, 0);
     var doseWakeups = result.filter(function (w) { return w.type === 'dose'; });
-    expect(doseWakeups.length).toBe(8);
+    expect(doseWakeups.length).toBe(7);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
   });
 
-  test('more than 8 dose events yields exactly 8 wakeups — earliest ones win', function () {
+  test('more than 7 dose events yields 7 doses + 1 heartbeat — earliest win', function () {
     var meds = [];
     for (var h = 11; h <= 21; h++) meds.push(fixedMed(h));  // 11 events today
     var result = planWakeups(meds, NOW, 0);
     expect(result.length).toBe(8);
-    // The 8 wakeups should be the 8 earliest (11am … 6pm)
-    expect(result[0].ts).toBe(ts(2025, 1, 15, 11, 0));
-    expect(result[7].ts).toBe(ts(2025, 1, 15, 18, 0));
+    var doses = result.filter(function (w) { return w.type === 'dose'; });
+    expect(doses.length).toBe(7);
+    // The 7 doses should be the 7 earliest (11am … 5pm)
+    expect(doses[0].ts).toBe(ts(2025, 1, 15, 11, 0));
+    expect(doses[6].ts).toBe(ts(2025, 1, 15, 17, 0));
+    expect(result[7].type).toBe('heartbeat');
   });
 
   test('events beyond 48h horizon are excluded', function () {
@@ -218,16 +224,16 @@ describe('planWakeups - deduplication', function () {
     expect(at1pm.length).toBe(1);
   });
 
-  test('deduplication does not affect snooze wakeup', function () {
-    // Snooze time happens to coincide with a dose time — both should appear
-    // (different types; watch dispatches them separately).
+  test('deduplication does not affect snooze or heartbeat', function () {
+    // Snooze time happens to coincide with a dose time — all three should appear
     var snoozeTs = ts(2025, 1, 15, 12, 0);
     var meds = [fixedMed(12)];
     var result = planWakeups(meds, NOW, snoozeTs);
     var atNoon = result.filter(function (w) { return w.ts === snoozeTs; });
-    expect(atNoon.length).toBe(2);  // one 'dose' + one 'snooze'
+    expect(atNoon.length).toBe(2);  // one 'dose' + one 'snooze'; heartbeat at 6h
     expect(atNoon.map(function (w) { return w.type; }).sort())
       .toEqual(['dose', 'snooze']);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
   });
 
 });
@@ -237,49 +243,54 @@ describe('planWakeups - deduplication', function () {
 // ---------------------------------------------------------------------------
 describe('planWakeups - snooze slot reservation', function () {
 
-  test('no pending snooze → up to 8 dose slots available', function () {
+  test('no pending snooze → up to 7 dose slots + 1 heartbeat = 8 total', function () {
     var meds = [];
     for (var h = 11; h <= 19; h++) meds.push(fixedMed(h));  // 9 future doses
     var result = planWakeups(meds, NOW, 0);
     var doseCount = result.filter(function (w) { return w.type === 'dose'; }).length;
-    expect(doseCount).toBe(8);
+    expect(doseCount).toBe(7);
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(0);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
   });
 
-  test('pending snooze with many dose events gives 7 doses + 1 snooze', function () {
+  test('pending snooze with many dose events gives 6 doses + 1 snooze + 1 heartbeat', function () {
     // With 7-day horizon and MAX_OCC_PER_MED=4, two fixed meds yield 8 dose events.
-    // planWakeups caps dose slots at 7 when snooze is pending, reserving slot 8 for snooze.
+    // planWakeups caps dose slots at 6 when snooze is pending (1 reserved for heartbeat).
     var meds = [fixedMed(12), fixedMed(15)];
     var snoozeTs = NOW + 15 * 60;
     var result = planWakeups(meds, NOW, snoozeTs);
-    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(7);
+    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(6);
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
-    expect(result[result.length - 1]).toMatchObject({ ts: snoozeTs, type: 'snooze' });
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
+    expect(result[result.length - 2]).toMatchObject({ ts: snoozeTs, type: 'snooze' });
+    expect(result[result.length - 1]).toMatchObject({ type: 'heartbeat' });
   });
 
-  test('pending snooze + exactly 8 dose events → 7 doses + 1 snooze (eviction fix)', function () {
+  test('pending snooze + exactly 8 dose events → 6 doses + 1 snooze + 1 heartbeat (eviction fix)', function () {
     // This is the exact scenario that caused the bug: another med fires mid-snooze,
     // notifications_schedule_wakeups is called, and 8 dose events fill all slots,
-    // silently dropping the snooze.
+    // silently dropping the snooze.  With heartbeat reservation, dose cap is 6.
     var meds = [];
     for (var h = 11; h <= 18; h++) meds.push(fixedMed(h));  // exactly 8 future doses
     var snoozeTs = NOW + 15 * 60;
     var result = planWakeups(meds, NOW, snoozeTs);
 
     expect(result.length).toBe(8);
-    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(7);
+    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(6);
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
   });
 
-  test('pending snooze + more than 8 dose events → 7 doses + 1 snooze', function () {
+  test('pending snooze + more than 8 dose events → 6 doses + 1 snooze + 1 heartbeat', function () {
     var meds = [];
     for (var h = 11; h <= 21; h++) meds.push(fixedMed(h));  // 11 future doses
     var snoozeTs = NOW + 15 * 60;
     var result = planWakeups(meds, NOW, snoozeTs);
 
     expect(result.length).toBe(8);
-    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(7);
+    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(6);
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
   });
 
   test('expired snooze is not included', function () {
@@ -289,12 +300,14 @@ describe('planWakeups - snooze slot reservation', function () {
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(0);
   });
 
-  test('snooze is always appended last regardless of its timestamp', function () {
-    // Snooze at 10:10am; dose at 11am — snooze ts is earlier but must appear last
+  test('snooze is always just before the heartbeat, regardless of its timestamp', function () {
+    // Snooze at 10:10am; dose at 11am — snooze ts is earlier but appears before heartbeat
     var snoozeTs = NOW + 10 * 60;  // 10:10am
     var meds = [fixedMed(11)];     // 11am
     var result = planWakeups(meds, NOW, snoozeTs);
-    expect(result[result.length - 1].type).toBe('snooze');
+    // snooze second-to-last, heartbeat last
+    expect(result[result.length - 2].type).toBe('snooze');
+    expect(result[result.length - 1].type).toBe('heartbeat');
   });
 
   test('zero meds + pending snooze → only the snooze wakeup', function () {
@@ -311,21 +324,24 @@ describe('planWakeups - snooze slot reservation', function () {
 // ---------------------------------------------------------------------------
 describe('planWakeups - per-med occurrence cap', function () {
 
-  test('high-frequency interval med contributes at most MAX_OCC_PER_MED events', function () {
-    // 4h interval → up to 12 occurrences in 48h; only 4 should enter the pool
+  test('high-frequency interval med contributes at most MAX_OCC_PER_MED dose events', function () {
+    // 4h interval → up to 4 dose events + 1 heartbeat = 5 total
     var med = intervalMed(4, 11, 0);  // start 11am
     var result = planWakeups([med], NOW, 0);
-    expect(result.length).toBeLessThanOrEqual(MAX_OCC_PER_MED);
+    expect(result.filter(function (w) { return w.type === 'dose'; }).length)
+      .toBeLessThanOrEqual(MAX_OCC_PER_MED);
   });
 
-  test('two high-frequency meds each contribute up to 4 events; best 8 selected', function () {
-    // Two 4h-interval meds → up to 8 events in pool → up to 8 slots filled
+  test('two high-frequency meds each contribute up to 4 events; 7 dose + 1 heartbeat', function () {
+    // Two 4h-interval meds → up to 8 events in pool → 7 dose + 1 heartbeat
     var meds = [intervalMed(4, 11, 0), intervalMed(4, 13, 0)];
     var result = planWakeups(meds, NOW, 0);
     expect(result.length).toBeLessThanOrEqual(8);
-    // All returned wakeups should be dose type and sorted
-    for (var i = 1; i < result.length; i++) {
-      expect(result[i].ts).toBeGreaterThan(result[i - 1].ts);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
+    // All returned dose wakeups should be sorted
+    var doses = result.filter(function (w) { return w.type === 'dose'; });
+    for (var i = 1; i < doses.length; i++) {
+      expect(doses[i].ts).toBeGreaterThan(doses[i - 1].ts);
     }
   });
 
@@ -350,13 +366,14 @@ describe('planWakeups - real-world user scenarios', function () {
     var snoozeTs = NOW + 15 * 60;          // 10:15am
     var rescheduleNow = NOW + 10 * 60;      // 10:10am — when Med B fires
 
-    // Enough meds to fill 8 dose slots
+    // Enough meds to fill all dose slots (6 with snooze pending)
     var meds = [];
     for (var h = 11; h <= 18; h++) meds.push(fixedMed(h));
 
     var result = planWakeups(meds, rescheduleNow, snoozeTs);
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
     expect(result.filter(function (w) { return w.type === 'snooze'; })[0].ts).toBe(snoozeTs);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
     expect(result.length).toBeLessThanOrEqual(8);
   });
 
@@ -405,6 +422,7 @@ describe('planWakeups - real-world user scenarios', function () {
     // Basic sanity checks
     expect(result.length).toBeLessThanOrEqual(8);
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
     result.forEach(function (w) {
       if (w.type === 'dose') {
         expect(w.ts).toBeGreaterThan(NOW + RANGE_MIN_SECS);
@@ -418,7 +436,7 @@ describe('planWakeups - real-world user scenarios', function () {
     }
   });
 
-  test('16 meds (platform maximum): no crash, 8 slots filled, snooze preserved', function () {
+  test('16 meds (platform maximum): no crash, slots filled, snooze preserved', function () {
     var meds = [];
     for (var i = 0; i < 16; i++) {
       meds.push(fixedMed(11 + (i % 12)));  // spread across hours 11am–10pm
@@ -428,6 +446,7 @@ describe('planWakeups - real-world user scenarios', function () {
 
     expect(result.length).toBeLessThanOrEqual(8);
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
   });
 
   test('stale lastTakenTs: future doses still scheduled (JS handles correctly; note C limitation)', function () {
@@ -446,13 +465,14 @@ describe('planWakeups - real-world user scenarios', function () {
   });
 
   test('snooze fires but dose wakeup also fires within the same 5-min window', function () {
-    // Both snooze and a dose are in the plan — both should appear with correct types.
+    // Both snooze, a dose, and heartbeat are in the plan.
     var snoozeTs = ts(2025, 1, 15, 11, 0);
     var doseMed  = fixedMed(14);
     var result   = planWakeups([doseMed], NOW, snoozeTs);
 
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
     expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBeGreaterThan(0);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
   });
 
   test('snooze set to 15 minutes; med due in 10 minutes also scheduled', function () {
@@ -492,9 +512,11 @@ describe('planWakeups - weekly schedule', function () {
     expect(result[0].type).toBe('dose');
   });
 
-  test('weekly med with no active days produces no wakeups', function () {
+  test('weekly med with no active days produces only a heartbeat', function () {
     var meds = [weeklyMed(9, 0, 0)];
-    expect(planWakeups(meds, NOW, 0)).toEqual([]);
+    var result = planWakeups(meds, NOW, 0);
+    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(0);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
   });
 
   test('weekly med on a far future day still appears within 7-day horizon', function () {
@@ -516,8 +538,75 @@ describe('planWakeups - weekly schedule', function () {
 
     expect(result.length).toBeLessThanOrEqual(8);
     expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
 
     // Weekly Wed 11am should appear
     expect(result.some(function (w) { return w.ts === ts(2025, 1, 15, 11, 0); })).toBe(true);
   });
+});
+
+// ---------------------------------------------------------------------------
+// planWakeups — heartbeat safety net
+// ---------------------------------------------------------------------------
+describe('planWakeups - heartbeat safety net', function () {
+
+  test('heartbeat is always present when meds exist', function () {
+    var result = planWakeups([fixedMed(14)], NOW, 0);
+    var hb = result.filter(function (w) { return w.type === 'heartbeat'; });
+    expect(hb.length).toBe(1);
+    expect(hb[0].ts).toBe(NOW + HEARTBEAT_INTERVAL_SECS);
+  });
+
+  test('heartbeat is always the last entry', function () {
+    var meds = [];
+    for (var h = 11; h <= 15; h++) meds.push(fixedMed(h));
+    var result = planWakeups(meds, NOW, 0);
+    expect(result[result.length - 1].type).toBe('heartbeat');
+  });
+
+  test('heartbeat timestamp is exactly now + 6 hours', function () {
+    var customNow = ts(2025, 6, 1, 3, 15);
+    var result = planWakeups([fixedMed(8)], customNow, 0);
+    var hb = result.filter(function (w) { return w.type === 'heartbeat'; })[0];
+    expect(hb.ts).toBe(customNow + HEARTBEAT_INTERVAL_SECS);
+  });
+
+  test('heartbeat still present with snooze pending', function () {
+    var snoozeTs = NOW + 15 * 60;
+    var result = planWakeups([fixedMed(12)], NOW, snoozeTs);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
+    expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
+  });
+
+  test('no heartbeat when there are no meds (matches C early-return)', function () {
+    var result = planWakeups([], NOW, 0);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(0);
+  });
+
+  test('no heartbeat when there are no meds even with snooze pending', function () {
+    var snoozeTs = NOW + 15 * 60;
+    var result = planWakeups([], NOW, snoozeTs);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(0);
+    expect(result.filter(function (w) { return w.type === 'snooze'; }).length).toBe(1);
+  });
+
+  test('heartbeat consumes 1 slot: max total with many meds is 8', function () {
+    var meds = [];
+    for (var h = 11; h <= 22; h++) meds.push(fixedMed(h));
+    var result = planWakeups(meds, NOW, 0);
+    expect(result.length).toBe(8);
+    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(7);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
+  });
+
+  test('heartbeat slot is not consumed by near-miss dose events', function () {
+    var meds = [
+      { scheduleType: 'fixed', times: [{ h: 10, m: 0 }] },
+    ];
+    for (var h = 11; h <= 17; h++) meds.push(fixedMed(h));
+    var result = planWakeups(meds, NOW, 0);
+    expect(result.filter(function (w) { return w.type === 'dose'; }).length).toBe(7);
+    expect(result.filter(function (w) { return w.type === 'heartbeat'; }).length).toBe(1);
+  });
+
 });

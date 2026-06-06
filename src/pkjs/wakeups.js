@@ -5,8 +5,8 @@
 // test suite directly.
 //
 // NOTE: Keep this file in sync with notifications.c.  Any change to
-// slot-filling, snooze-reservation, or per-med occurrence cap logic there
-// must be reflected here, and tests/wakeups.test.js updated to match.
+// slot-filling, snooze-reservation, heartbeat, or per-med occurrence cap
+// logic there must be reflected here, and tests/wakeups.test.js updated to match.
 //
 // The Pebble platform limits apps to 8 simultaneous wakeup slots.
 // This module plans which slots to fill given the current med list and any
@@ -17,16 +17,18 @@
 var schedule = require('./schedule');
 
 // Cookie values — must match WAKEUP_COOKIE_* in notifications.c
-var COOKIE_DOSE   = 0;
-var COOKIE_SNOOZE = 1;
+var COOKIE_DOSE      = 0;
+var COOKIE_SNOOZE    = 1;
+var COOKIE_HEARTBEAT = 2;
 
 // Collect dose events up to this many per medication.
 // Matches the occ < 4 cap in collect_dose_events() in notifications.c.
 var MAX_OCC_PER_MED = 4;
 
 // Platform constants
-var HORIZON_SECS   = 7 * 24 * 3600;  // 7-day horizon for weekly schedules
-var RANGE_MIN_SECS = 60;          // wakeup_schedule rejects times < 60s from now
+var HORIZON_SECS          = 7 * 24 * 3600;  // 7-day horizon for weekly schedules
+var RANGE_MIN_SECS        = 60;             // wakeup_schedule rejects times < 60s from now
+var HEARTBEAT_INTERVAL_SECS = 6 * 3600;     // safety-net recovery window
 
 // ---------------------------------------------------------------------------
 // collectDoseEvents(meds, now) → sorted array of { ts, medIndex }
@@ -59,22 +61,28 @@ function collectDoseEvents(meds, now) {
 // Mirrors notifications_schedule_wakeups() in notifications.c.
 //
 // Returns up to 8 wakeup descriptors:
-//   type: 'dose'   — a regular scheduled dose; medIndex is set
-//   type: 'snooze' — a pending snooze reminder; medIndex is absent
+//   type: 'dose'      — a regular scheduled dose; medIndex is set
+//   type: 'snooze'    — a pending snooze reminder; medIndex is absent
+//   type: 'heartbeat' — safety-net recovery wakeup (always the last entry)
 //
 // Key behaviours:
 //   - Fills dose slots in chronological order
 //   - Deduplicates same-second timestamps (two meds due simultaneously → 1 slot)
 //   - Skips events within RANGE_MIN_SECS of now without consuming a slot
-//   - When a snooze is pending, caps dose slots at 7 to guarantee the snooze
-//     a slot (fixes the eviction bug where a full 8-slot dose schedule would
-//     silently drop the snooze when another med fired mid-snooze)
+//   - Always reserves 1 slot for the heartbeat safety net (reducing max dose
+//     slots from 8 to 7, or from 7 to 6 when a snooze is also pending)
+//   - When a snooze is pending, reserves 1 additional slot for it
 //
 // pendingSnoozeTs: pass 0 or null when no snooze is pending.
 // ---------------------------------------------------------------------------
 function planWakeups(meds, now, pendingSnoozeTs) {
   var hasSnooze = !!(pendingSnoozeTs && pendingSnoozeTs > now);
-  var maxDose   = hasSnooze ? 7 : 8;
+  var maxDose   = hasSnooze ? 6 : 7;  // 8 total - 1 heartbeat - (1 snooze?)
+
+  if (meds.length === 0) {
+    if (hasSnooze) return [{ ts: pendingSnoozeTs, type: 'snooze' }];
+    return [];
+  }
 
   var events  = collectDoseEvents(meds, now);
   var wakeups = [];
@@ -92,15 +100,19 @@ function planWakeups(meds, now, pendingSnoozeTs) {
     wakeups.push({ ts: pendingSnoozeTs, type: 'snooze' });
   }
 
+  wakeups.push({ ts: now + HEARTBEAT_INTERVAL_SECS, type: 'heartbeat' });
+
   return wakeups;
 }
 
 module.exports = {
-  planWakeups:       planWakeups,
-  collectDoseEvents: collectDoseEvents,
-  COOKIE_DOSE:       COOKIE_DOSE,
-  COOKIE_SNOOZE:     COOKIE_SNOOZE,
-  RANGE_MIN_SECS:    RANGE_MIN_SECS,
-  MAX_OCC_PER_MED:   MAX_OCC_PER_MED,
-  HORIZON_SECS:      HORIZON_SECS,
+  planWakeups:            planWakeups,
+  collectDoseEvents:      collectDoseEvents,
+  COOKIE_DOSE:            COOKIE_DOSE,
+  COOKIE_SNOOZE:          COOKIE_SNOOZE,
+  COOKIE_HEARTBEAT:       COOKIE_HEARTBEAT,
+  RANGE_MIN_SECS:         RANGE_MIN_SECS,
+  MAX_OCC_PER_MED:        MAX_OCC_PER_MED,
+  HORIZON_SECS:           HORIZON_SECS,
+  HEARTBEAT_INTERVAL_SECS: HEARTBEAT_INTERVAL_SECS,
 };
