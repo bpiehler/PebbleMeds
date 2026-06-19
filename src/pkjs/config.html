@@ -1123,6 +1123,12 @@ function saveMed() {
 
   var med = { taker: taker, name: name, dose: dose, shape: shape, color: color };
 
+  if (editingIndex >= 0 && meds[editingIndex].medId) {
+    med.medId = meds[editingIndex].medId;
+  } else {
+    med.medId = uuidv4();
+  }
+
   if (document.getElementById("sched-fixed").checked) {
     var times = getTimes();
     if (!times.length) { alert("Please add at least one time."); return; }
@@ -1186,6 +1192,13 @@ function saveConfig() {
 // Utility
 // ---------------------------------------------------------------------------
 function pad(n) { return n < 10 ? "0" + n : "" + n; }
+
+function uuidv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 </script>
 </body>
 </html>

@@ -77,9 +77,19 @@ Before the heartbeat fix, wakeup chain breaks (app crash, watch reboot) were per
 - Wakeups may be cleared on watch reboot or app reinstall
 - There is NO "background app" concept in SDK 3/4 — the Wakeup API IS the background mechanism
 
+### Timeline Pin Management
+
+Pin IDs use the format `pebble-meds-{medId}-{timestamp}`. The `medId` is a stable UUID v4 assigned at medication creation (`config.html:saveMed()`) and persisted through edits. The `pushTimelinePins()` function in `timeline.js` stores a `medId → [pin IDs]` map in localStorage (`pebble_meds_timeline_pin_ids`). Before inserting new pins, it deletes all previously-tracked pins via `Pebble.deleteTimelinePin()` (available in Rebble app v1.0.6.8+). Backward-compat migration assigns `medId` to existing meds that lack one on first push.
+
+First-time upgrade: old index-based pins (`pebble-meds-{index}-{ts}`) from before medId exist as permanent orphans until they age past the 48h horizon — unavoidable without knowing historical timestamps.
+
 ### AppMessage Chunking
 
 JSON config is ~3KB; max AppMessage inbox size is 768 bytes. Config is split into chunks of ~200 bytes each, reassembled on watch. Buffer is 3300 bytes.
+
+### Timeline Pin Cleanup API
+
+The Rebble app (v1.0.6.8+) exposes `Pebble.deleteTimelinePin(id)` in addition to `insertTimelinePin`. This is a local API — remote timeline pins (`getAccountToken`/`getWatchToken`) are not supported. The `deleteTimelinePin` call is synchronous/fire-and-forget (no success/failure callbacks).
 
 ### Monochrome Drawing
 
