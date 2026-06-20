@@ -590,16 +590,17 @@
         <div class="interval-row">
           <div class="field">
             <label>Repeat Every</label>
-            <input type="text" inputmode="numeric" pattern="[0-9]*" id="f-interval-hours" value="8" list="interval-presets">
-            <datalist id="interval-presets">
-              <option value="3">
-              <option value="4">
-              <option value="6">
-              <option value="8">
-              <option value="12">
-              <option value="24">
-            </datalist>
-            <div class="field-hint" style="margin-top:2px;">hours</div>
+            <select id="f-interval-preset" onchange="onIntervalPresetChange()">
+              <option value="3">3 hours</option>
+              <option value="4">4 hours</option>
+              <option value="6">6 hours</option>
+              <option value="8">8 hours</option>
+              <option value="12">12 hours</option>
+              <option value="24">24 hours</option>
+              <option value="custom">Custom...</option>
+            </select>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" id="f-interval-custom"
+                   style="display:none;margin-top:6px;" placeholder="Hours (1&ndash;168)">
           </div>
           <div class="field">
             <label>First Dose At</label>
@@ -984,7 +985,7 @@ function openModal(index) {
     document.getElementById("f-name").value = "";
     document.getElementById("f-dose").value = "";
     document.getElementById("sched-fixed").checked = true;
-    document.getElementById("f-interval-hours").value = "8";
+    setIntervalHours(8);
     document.getElementById("f-start-time").value = "08:00";
     setWeekMask(0);
     document.getElementById("f-weekly-time").value = "09:00";
@@ -999,7 +1000,7 @@ function openModal(index) {
 
     if (med.scheduleType === "interval") {
       document.getElementById("sched-interval").checked = true;
-      document.getElementById("f-interval-hours").value = String(med.intervalHours);
+      setIntervalHours(med.intervalHours);
       document.getElementById("f-start-time").value = pad(med.startHour) + ":" + pad(med.startMinute);
     } else if (med.scheduleType === "weekly") {
       document.getElementById("sched-weekly").checked = true;
@@ -1044,6 +1045,36 @@ function onScheduleTypeChange() {
   document.getElementById("panel-fixed").style.display    = isFixed ? "block" : "none";
   document.getElementById("panel-interval").style.display = (!isFixed && !isWeekly) ? "block" : "none";
   document.getElementById("panel-weekly").style.display   = isWeekly ? "block" : "none";
+}
+
+function onIntervalPresetChange() {
+  var sel = document.getElementById("f-interval-preset");
+  var custom = document.getElementById("f-interval-custom");
+  custom.style.display = sel.value === "custom" ? "block" : "none";
+  if (sel.value === "custom") custom.focus();
+}
+
+function getIntervalHours() {
+  var preset = document.getElementById("f-interval-preset");
+  if (preset.value === "custom") {
+    return parseInt(document.getElementById("f-interval-custom").value, 10);
+  }
+  return parseInt(preset.value, 10);
+}
+
+function setIntervalHours(hours) {
+  var presets = [3, 4, 6, 8, 12, 24];
+  var presetSel = document.getElementById("f-interval-preset");
+  var customInput = document.getElementById("f-interval-custom");
+  if (presets.indexOf(hours) >= 0) {
+    presetSel.value = String(hours);
+    customInput.style.display = "none";
+    customInput.value = "";
+  } else {
+    presetSel.value = "custom";
+    customInput.style.display = "block";
+    customInput.value = String(hours);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1141,7 +1172,7 @@ function saveMed() {
   } else if (document.getElementById("sched-interval").checked) {
     var startParts = document.getElementById("f-start-time").value.split(":");
     med.scheduleType  = "interval";
-    med.intervalHours = parseInt(document.getElementById("f-interval-hours").value, 10);
+    med.intervalHours = getIntervalHours();
     if (!med.intervalHours || med.intervalHours < 1 || med.intervalHours > 168) {
       alert("Please enter a number between 1 and 168 for the interval hours.");
       return;
