@@ -590,7 +590,7 @@
         <div class="interval-row">
           <div class="field">
             <label>Repeat Every</label>
-            <input type="number" id="f-interval-hours" value="8" min="1" max="168" step="1" list="interval-presets">
+            <input type="text" inputmode="numeric" pattern="[0-9]*" id="f-interval-hours" value="8" list="interval-presets">
             <datalist id="interval-presets">
               <option value="3">
               <option value="4">
@@ -1142,6 +1142,10 @@ function saveMed() {
     var startParts = document.getElementById("f-start-time").value.split(":");
     med.scheduleType  = "interval";
     med.intervalHours = parseInt(document.getElementById("f-interval-hours").value, 10);
+    if (!med.intervalHours || med.intervalHours < 1 || med.intervalHours > 168) {
+      alert("Please enter a number between 1 and 168 for the interval hours.");
+      return;
+    }
     med.startHour     = parseInt(startParts[0], 10);
     med.startMinute   = parseInt(startParts[1], 10);
     med.lastTakenTs   = (editingIndex >= 0 && meds[editingIndex].lastTakenTs)
