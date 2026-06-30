@@ -160,6 +160,7 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
         persist_write_int(PERSIST_KEY_SNOOZE_MED,  0xFF);
         persist_write_int(PERSIST_KEY_SNOOZE_DOSE, 0);
         notifications_schedule_wakeups();
+        light_enable_interaction();
         MedEntry *snooze_med = med_list_get(med_index);
         fire_vibe(snooze_med ? snooze_med->vibePattern : MED_VIBE_SHORT);
         if (snooze_med) {
@@ -195,6 +196,7 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
         return;
     }
 
+    light_enable_interaction();
     fire_vibe(med_list_get(due_indices[0]) ? med_list_get(due_indices[0])->vibePattern : MED_VIBE_SHORT);
     detail_window_push(due_indices[0], due_times[0], DETAIL_MODE_ALERT);
     notifications_schedule_wakeups();
