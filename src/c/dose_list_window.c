@@ -106,8 +106,8 @@ static int16_t get_header_height(MenuLayer *layer, uint16_t section, void *ctx) 
 }
 
 static void draw_header(GContext *ctx, const Layer *cell_layer, uint16_t section, void *ctx_data) {
-    GRect bounds = layer_get_bounds(cell_layer);
 #ifdef PBL_ROUND
+    GRect bounds = layer_get_bounds(cell_layer);
     graphics_context_set_text_color(ctx, GColorBlack);
     graphics_draw_text(ctx, "Upcoming Doses", fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
                        GRect(0, 0, bounds.size.w, 34), GTextOverflowModeFill, GTextAlignmentCenter, NULL);

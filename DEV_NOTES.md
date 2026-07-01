@@ -53,7 +53,7 @@ The JS mirrors are testable without a Pebble emulator.
 
 The `MedEntry` struct is stored as raw binary blobs via `persist_write_data`/`persist_read_data` with `sizeof(MedEntry)`. **New fields must be appended at the END of the struct**, never inserted in the middle. Inserting a field shifts byte offsets of all subsequent fields, corrupting existing users' stored data on upgrade.
 
-- OK: add fields after `color`
+- OK: add fields after `vibePattern`
 - NOT OK: insert fields between `lastTakenTs` and `shape` (done once, caused shape/color corruption mitigated by JSON sync)
 
 ### 2. Config Page Backward Compatibility (GitHub Pages)

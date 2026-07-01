@@ -23,6 +23,12 @@ typedef enum {
     SHAPE_DROP    = 4,
 } PillShape;
 
+typedef enum {
+    MED_VIBE_SHORT  = 0,
+    MED_VIBE_LONG   = 1,
+    MED_VIBE_DOUBLE = 2,
+} MedVibePattern;
+
 typedef struct {
     char         taker[24];
     char         name[32];
@@ -41,6 +47,8 @@ typedef struct {
     // Visual
     PillShape    shape;
     GColor       color;
+    // Alert
+    uint8_t      vibePattern;  // MedVibePattern; 0 = short (default)
 } MedEntry;
 
 typedef struct {

@@ -624,6 +624,16 @@
         </div>
       </div>
 
+      <!-- Vibration -->
+      <div class="field">
+        <label>Vibration</label>
+        <select id="f-vibe">
+          <option value="short">Short pulse (default)</option>
+          <option value="long">Long pulse</option>
+          <option value="double">Double pulse</option>
+        </select>
+      </div>
+
       <!-- Shape -->
       <div class="field">
         <label>Pill Shape</label>
@@ -992,6 +1002,7 @@ function openModal(index) {
     document.getElementById("shape-round").checked = true;
     document.querySelector('input[name="pill-color"]').checked = true;
     setTimes([{ h: 8, m: 0 }]);
+    document.getElementById("f-vibe").value = "short";
   } else {
     var med = meds[index];
     populateTakerSelect(med.taker);
@@ -1021,6 +1032,9 @@ function openModal(index) {
     // Color
     var colorInput = document.querySelector('input[name="pill-color"][value="' + med.color + '"]');
     if (colorInput) colorInput.checked = true;
+
+    // Vibration
+    document.getElementById("f-vibe").value = med.vibePattern || "short";
   }
 
   onScheduleTypeChange();
@@ -1156,7 +1170,9 @@ function saveMed() {
 
   if (!name)  { alert("Please enter the medication name."); return; }
 
-  var med = { taker: taker, name: name, dose: dose, shape: shape, color: color };
+  var vibe = document.getElementById("f-vibe").value;
+  var med = { taker: taker, name: name, dose: dose, shape: shape, color: color,
+              vibePattern: vibe === "short" ? undefined : vibe };
 
   if (editingIndex >= 0 && meds[editingIndex].medId) {
     med.medId = meds[editingIndex].medId;
