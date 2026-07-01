@@ -103,7 +103,7 @@ void notifications_schedule_wakeups(void) {
         wakeup_schedule(snooze_t, WAKEUP_COOKIE_SNOOZE, false);
     }
 
-    wakeup_schedule(now + HEARTBEAT_INTERVAL_SECS, WAKEUP_COOKIE_HEARTBEAT, false);
+    wakeup_schedule(now + HEARTBEAT_INTERVAL_SECS, WAKEUP_COOKIE_HEARTBEAT, true);
 }
 
 // ---------------------------------------------------------------------------
