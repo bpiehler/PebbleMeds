@@ -133,7 +133,6 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
 
     if (cookie == WAKEUP_COOKIE_HEARTBEAT) {
         notifications_schedule_wakeups();
-        dose_list_window_push();
         return;
     }
 
