@@ -29,6 +29,12 @@ typedef enum {
     MED_VIBE_DOUBLE = 2,
 } MedVibePattern;
 
+typedef enum {
+    MED_VIBE_LIGHT  = 0,   // one pass  — default, matches pre-1.0.5 feel
+    MED_VIBE_MEDIUM = 1,   // two passes
+    MED_VIBE_STRONG = 2,   // three passes
+} MedVibeStrength;
+
 typedef struct {
     char         taker[24];
     char         name[32];
@@ -49,11 +55,13 @@ typedef struct {
     GColor       color;
     // Alert
     uint8_t      vibePattern;  // MedVibePattern; 0 = short (default)
+    uint8_t      vibeStrength; // MedVibeStrength; 0 = light (default)
 } MedEntry;
 
 typedef struct {
     uint16_t snoozeMins;
     bool     privacyMode;
+    bool     repeatSnooze;   // keep re-alerting every snoozeMins until confirmed
 } AppSettings;
 
 void         med_list_init(void);

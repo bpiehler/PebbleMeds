@@ -15,6 +15,15 @@ static void handle_wakeup_launch(WakeupId id, int32_t cookie) {
   notifications_handle_wakeup(id, cookie);
 }
 
+static void handle_wakeup_while_running(WakeupId id, int32_t cookie) {
+  // Wakeups are also delivered to an app that is already running - but only
+  // if it subscribed.  Without this, an alert left on screen blocked every
+  // later nag: the snooze wakeup fired with no launch and no subscriber, so
+  // notifications_handle_wakeup() was never called and the watch stayed quiet
+  // until the window was dismissed.
+  notifications_handle_wakeup(id, cookie);
+}
+
 static void handle_timeline_launch(uint32_t launch_code) {
   // Called when app is launched by a Timeline pin action.
   // launch_code 1 = Taken, 2 = Snooze
@@ -32,6 +41,10 @@ static void init(void) {
 
   // Open AppMessage channel so we can receive config updates from the phone.
   appmessage_init();
+
+  // Receive wakeups while the app is running (alert window on screen), not
+  // only when they launch it.  See handle_wakeup_while_running().
+  wakeup_service_subscribe(handle_wakeup_while_running);
 
   // Determine why the app launched and respond appropriately.
   AppLaunchReason reason = launch_reason();

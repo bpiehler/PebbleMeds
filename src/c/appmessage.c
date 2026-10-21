@@ -200,6 +200,16 @@ static void parse_med_object(const char *js, size_t len, MedEntry *med) {
             else
                 med->vibePattern = MED_VIBE_SHORT;
 
+        } else if (jsmn_eq(js, key, "vibeStrength")) {
+            char buf[8];
+            jsmn_str(js, val, buf, sizeof(buf));
+            if (strcmp(buf, "strong") == 0)
+                med->vibeStrength = MED_VIBE_STRONG;
+            else if (strcmp(buf, "medium") == 0)
+                med->vibeStrength = MED_VIBE_MEDIUM;
+            else
+                med->vibeStrength = MED_VIBE_LIGHT;
+
         } else if (jsmn_eq(js, key, "times") && val->type == JSMN_ARRAY) {
             uint8_t count = (uint8_t)(val->size > 4 ? 4 : val->size);
             med->timeCount = count;
@@ -228,10 +238,11 @@ static void parse_med_object(const char *js, size_t len, MedEntry *med) {
 
 static void parse_settings_object(const char *js, size_t len) {
     jsmn_parser parser;
-    jsmntok_t tokens[16];
+    // 24 tokens: 1 object + 4 key/value pairs + knownTakers array + its strings.
+    jsmntok_t tokens[24];
     jsmn_init(&parser);
 
-    int r = jsmn_parse(&parser, js, len, tokens, 16);
+    int r = jsmn_parse(&parser, js, len, tokens, 24);
     if (r < 1 || tokens[0].type != JSMN_OBJECT) return;
 
     AppSettings *s = med_list_get_settings();
@@ -246,6 +257,11 @@ static void parse_settings_object(const char *js, size_t len) {
             char buf[8];
             jsmn_str(js, val, buf, sizeof(buf));
             s->privacyMode = (strcmp(buf, "true") == 0);
+
+        } else if (jsmn_eq(js, key, "repeatSnooze")) {
+            char buf[8];
+            jsmn_str(js, val, buf, sizeof(buf));
+            s->repeatSnooze = (strcmp(buf, "true") == 0);
         }
         j += jsmn_subtree_size(tokens, j);
     }

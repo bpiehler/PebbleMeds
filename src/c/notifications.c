@@ -17,12 +17,45 @@
 // Vibration helper
 // ---------------------------------------------------------------------------
 
-static void fire_vibe(uint8_t vibe_pattern) {
+#define VIBE_MAX_SEGMENTS  12
+#define VIBE_REPEAT_GAP_MS 250
+
+static const uint32_t VIBE_BASE_SHORT[]  = { 200 };
+static const uint32_t VIBE_BASE_LONG[]   = { 700 };
+static const uint32_t VIBE_BASE_DOUBLE[] = { 200, 150, 200 };
+
+static void fire_vibe(uint8_t vibe_pattern, uint8_t vibe_strength) {
+    const uint32_t *base;
+    uint8_t         base_len;
+
     switch (vibe_pattern) {
-        case MED_VIBE_LONG:   vibes_long_pulse();   break;
-        case MED_VIBE_DOUBLE: vibes_double_pulse(); break;
-        default:          vibes_short_pulse();  break;
+        case MED_VIBE_LONG:   base = VIBE_BASE_LONG;   base_len = 1; break;
+        case MED_VIBE_DOUBLE: base = VIBE_BASE_DOUBLE; base_len = 3; break;
+        default:              base = VIBE_BASE_SHORT;  base_len = 1; break;
     }
+
+    uint8_t passes = (vibe_strength == MED_VIBE_STRONG)   ? 3
+                   : (vibe_strength == MED_VIBE_MEDIUM) ? 2
+                                                        : 1;
+
+    // Static buffer: the firmware reads the durations while the vibe plays.
+    static uint32_t   segments[VIBE_MAX_SEGMENTS];
+    static VibePattern pattern;
+    uint8_t           n = 0;
+
+    for (uint8_t pass = 0; pass < passes; pass++) {
+        if (pass > 0) {
+            if (n + 1 + base_len > VIBE_MAX_SEGMENTS) break;
+            segments[n++] = VIBE_REPEAT_GAP_MS;
+        }
+        for (uint8_t s = 0; s < base_len && n < VIBE_MAX_SEGMENTS; s++) {
+            segments[n++] = base[s];
+        }
+    }
+
+    pattern.durations    = segments;
+    pattern.num_segments = n;
+    vibes_enqueue_custom_pattern(pattern);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +170,20 @@ void notifications_schedule_snooze(uint8_t med_index, time_t dose_time) {
 }
 
 // ---------------------------------------------------------------------------
+// Public: drop a pending snooze for a confirmed dose
+// ---------------------------------------------------------------------------
+
+void notifications_cancel_snooze(uint8_t med_index, time_t dose_time) {
+    // Identity-checked: a pending snooze belonging to another medication (or
+    // to another occurrence of the same one) must survive.
+    if ((uint8_t)persist_read_int(PERSIST_KEY_SNOOZE_MED)  != med_index) return;
+    if ((time_t)persist_read_int(PERSIST_KEY_SNOOZE_DOSE)  != dose_time) return;
+    persist_write_int(PERSIST_KEY_SNOOZE,      0);
+    persist_write_int(PERSIST_KEY_SNOOZE_MED,  0xFF);
+    persist_write_int(PERSIST_KEY_SNOOZE_DOSE, 0);
+}
+
+// ---------------------------------------------------------------------------
 // Public: wakeup launch handler
 // ---------------------------------------------------------------------------
 
@@ -154,19 +201,34 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
         // the snooze fires snoozeMins after the original dose, which is outside
         // DUE_WINDOW_SECS, so a window search would always return due_count==0
         // and fall through to dose_list_window_push() instead of the alert.
-        uint8_t med_index = (uint8_t)persist_read_int(PERSIST_KEY_SNOOZE_MED);
-        time_t  dose_ts   = (time_t)persist_read_int(PERSIST_KEY_SNOOZE_DOSE);
-        persist_write_int(PERSIST_KEY_SNOOZE,      0);
-        persist_write_int(PERSIST_KEY_SNOOZE_MED,  0xFF);
-        persist_write_int(PERSIST_KEY_SNOOZE_DOSE, 0);
+        uint8_t   med_index = (uint8_t)persist_read_int(PERSIST_KEY_SNOOZE_MED);
+        time_t    dose_ts   = (time_t)persist_read_int(PERSIST_KEY_SNOOZE_DOSE);
+        MedEntry *snooze_med = med_list_get(med_index);
+        AppSettings *settings = med_list_get_settings();
+
+        // Keep-nagging mode: re-arm the snooze BEFORE re-alerting, so an alert
+        // the user ignores fires again after snoozeMins.  Confirming the dose
+        // (Taken/Skip) clears it via notifications_cancel_snooze().
+        if (snooze_med && settings->repeatSnooze) {
+            uint16_t snooze_mins = (settings->snoozeMins > 0) ? settings->snoozeMins : 15;
+            persist_write_int(PERSIST_KEY_SNOOZE, (int32_t)(now + (time_t)snooze_mins * 60));
+        } else {
+            persist_write_int(PERSIST_KEY_SNOOZE,      0);
+            persist_write_int(PERSIST_KEY_SNOOZE_MED,  0xFF);
+            persist_write_int(PERSIST_KEY_SNOOZE_DOSE, 0);
+        }
         notifications_schedule_wakeups();
         light_enable_interaction();
-        MedEntry *snooze_med = med_list_get(med_index);
-        fire_vibe(snooze_med ? snooze_med->vibePattern : MED_VIBE_SHORT);
-        if (snooze_med) {
-            detail_window_push(med_index, dose_ts, DETAIL_MODE_ALERT);
-        } else {
+        fire_vibe(snooze_med ? snooze_med->vibePattern  : MED_VIBE_SHORT,
+                  snooze_med ? snooze_med->vibeStrength : MED_VIBE_LIGHT);
+        if (!snooze_med) {
             dose_list_window_push();  // fallback: med was removed since snooze set
+        } else if (detail_window_alert_is_open(med_index, dose_ts)) {
+            // Alert still on screen — it was just re-vibrated above; pushing a
+            // second copy would stack windows.
+            return;
+        } else {
+            detail_window_push(med_index, dose_ts, DETAIL_MODE_ALERT);
         }
         return;
     }
@@ -197,9 +259,22 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
     }
 
     light_enable_interaction();
-    fire_vibe(med_list_get(due_indices[0]) ? med_list_get(due_indices[0])->vibePattern : MED_VIBE_SHORT);
+    MedEntry *first_due = med_list_get(due_indices[0]);
+    fire_vibe(first_due ? first_due->vibePattern  : MED_VIBE_SHORT,
+              first_due ? first_due->vibeStrength : MED_VIBE_LIGHT);
     detail_window_push(due_indices[0], due_times[0], DETAIL_MODE_ALERT);
-    notifications_schedule_wakeups();
+
+    // Keep-nagging.  The nag has to be armed when the alert *appears*, not
+    // only when the user presses Snooze: someone who ignores the alert
+    // (no button at all) must still be re-alerted after snoozeMins.  The
+    // snooze wakeup handler re-arms itself while repeatSnooze is set, and
+    // Taken/Skip clears it via notifications_cancel_snooze().
+    AppSettings *settings = med_list_get_settings();
+    if (settings->repeatSnooze) {
+        notifications_schedule_snooze(due_indices[0], due_times[0]);
+    } else {
+        notifications_schedule_wakeups();
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,8 @@
     "pebble-app"
   ],
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "config-page": "node tools/gen_config_page.js"
   },
   "main": "src/pkjs/app.js",
   "devDependencies": {

@@ -7,3 +7,5 @@ typedef enum {
 } DetailWindowMode;
 
 void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mode);
+// True while an ALERT window for exactly this dose is on the stack.
+bool detail_window_alert_is_open(uint8_t med_index, time_t dose_time);

@@ -427,11 +427,25 @@
   .color-name { font-size: 9px; color: #888; text-align: center; max-width: 40px; }
 
   /* Modal footer */
+  .modal-footer { display: block; }
+  .footer-buttons { display: flex; gap: 10px; }
+
+  .form-error {
+    display: none;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border: 1px solid #e94560;
+    border-radius: 6px;
+    background: rgba(233,69,96,0.12);
+    color: #e94560;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .form-error.visible { display: block; }
+
   .modal-footer {
     padding: 12px 16px;
     border-top: 1px solid #0f3460;
-    display: flex;
-    gap: 10px;
   }
 
   .btn-cancel {
@@ -499,6 +513,17 @@
       <input type="number" id="snooze-mins" min="1" max="60" value="15">
       <span style="color:#888;font-size:13px;">min</span>
     </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <div class="label">Keep Nagging</div>
+      <div class="hint">Re-alert every snooze interval until the dose is marked Taken or Skipped</div>
+    </div>
+    <label class="toggle-wrap">
+      <input type="checkbox" id="repeat-snooze">
+      <span class="slider"></span>
+    </label>
   </div>
 
   <div class="row">
@@ -634,6 +659,15 @@
         </select>
       </div>
 
+      <div class="field">
+        <label>Vibration Strength</label>
+        <select id="f-vibe-strength">
+          <option value="light">Light — one buzz (default)</option>
+          <option value="medium">Medium — two buzzes</option>
+          <option value="strong">Strong — three buzzes</option>
+        </select>
+      </div>
+
       <!-- Shape -->
       <div class="field">
         <label>Pill Shape</label>
@@ -685,8 +719,11 @@
 
     </div>
     <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-      <button class="btn-save-med" onclick="saveMed()">Save Medication</button>
+      <div class="form-error" id="form-error" role="alert"></div>
+      <div class="footer-buttons">
+        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+        <button class="btn-save-med" onclick="saveMed()">Save Medication</button>
+      </div>
     </div>
   </div>
 </div>
@@ -732,12 +769,17 @@ document.addEventListener("DOMContentLoaded", function () {
   buildColorGrid();
   buildWeekdayGrid();
 
-  // Initial config is passed as a URL fragment by index.js (localStorage
-  // is not available inside data URI pages on Android).
-  var hash = location.hash.slice(1);
-  if (hash) {
+  // The URL fragment fallback keeps a remotely hosted copy working.
+  var raw = (typeof window !== "undefined" && window.PEBBLE_MEDS_CONFIG) || null;
+  if (!raw) {
+    var hash = location.hash.slice(1);
+    if (hash) {
+      try { raw = decodeURIComponent(hash); } catch (e) { raw = null; }
+    }
+  }
+  if (raw) {
     try {
-      var cfg = JSON.parse(decodeURIComponent(hash));
+      var cfg = (typeof raw === "string") ? JSON.parse(raw) : raw;
       meds = cfg.meds || [];
       if (cfg.settings) {
         if (cfg.settings.snoozeMins !== undefined) {
@@ -745,6 +787,9 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         if (cfg.settings.privacyMode !== undefined) {
           document.getElementById("privacy-mode").checked = cfg.settings.privacyMode;
+        }
+        if (cfg.settings.repeatSnooze !== undefined) {
+          document.getElementById("repeat-snooze").checked = cfg.settings.repeatSnooze;
         }
         if (cfg.settings.knownTakers && cfg.settings.knownTakers.length) {
           knownTakers = cfg.settings.knownTakers;
@@ -918,7 +963,27 @@ function buildMedItem(med, index) {
   delBtn.className = "btn-icon";
   delBtn.textContent = "✕";
   delBtn.style.color = "#e94560";
-  delBtn.onclick = (function (i) { return function () { deleteMed(i); }; })(index);
+  var armed = false;
+  var armTimer = null;
+  delBtn.onclick = (function (i) {
+    return function () {
+      if (!armed) {
+        armed = true;
+        delBtn.textContent = "Sure?";
+        delBtn.style.background = "#e94560";
+        delBtn.style.color = "#fff";
+        armTimer = setTimeout(function () {
+          armed = false;
+          delBtn.textContent = "\u2715";
+          delBtn.style.background = "";
+          delBtn.style.color = "#e94560";
+        }, 3000);
+        return;
+      }
+      clearTimeout(armTimer);
+      deleteMed(i);
+    };
+  })(index);
 
   actions.appendChild(editBtn);
   actions.appendChild(delBtn);
@@ -930,7 +995,6 @@ function buildMedItem(med, index) {
 }
 
 function deleteMed(index) {
-  if (!confirm("Remove " + meds[index].name + "?")) return;
   meds.splice(index, 1);
   renderMedList();
 }
@@ -984,8 +1048,21 @@ function onTakerChange() {
 // ---------------------------------------------------------------------------
 // Modal open / close
 // ---------------------------------------------------------------------------
+function showFormError(msg) {
+  var el = document.getElementById("form-error");
+  el.textContent = msg;
+  el.classList.add("visible");
+}
+
+function clearFormError() {
+  var el = document.getElementById("form-error");
+  el.textContent = "";
+  el.classList.remove("visible");
+}
+
 function openModal(index) {
   editingIndex = index;
+  clearFormError();
   document.getElementById("modal-title").textContent =
     index === -1 ? "Add Medication" : "Edit Medication";
 
@@ -1003,6 +1080,7 @@ function openModal(index) {
     document.querySelector('input[name="pill-color"]').checked = true;
     setTimes([{ h: 8, m: 0 }]);
     document.getElementById("f-vibe").value = "short";
+    document.getElementById("f-vibe-strength").value = "light";
   } else {
     var med = meds[index];
     populateTakerSelect(med.taker);
@@ -1035,6 +1113,7 @@ function openModal(index) {
 
     // Vibration
     document.getElementById("f-vibe").value = med.vibePattern || "short";
+    document.getElementById("f-vibe-strength").value = med.vibeStrength || "light";
   }
 
   onScheduleTypeChange();
@@ -1155,7 +1234,7 @@ function saveMed() {
   var takerNew = document.getElementById("f-taker-new").value.trim();
   var taker;
   if (takerSel === "__new__") {
-    if (!takerNew) { alert("Please enter a name for the person taking this medication."); return; }
+    if (!takerNew) { showFormError("Please enter a name for the person taking this medication."); return; }
     taker = takerNew;
     if (knownTakers.indexOf(taker) < 0) knownTakers.push(taker);
   } else {
@@ -1168,11 +1247,13 @@ function saveMed() {
   var shape = document.querySelector('input[name="pill-shape"]:checked').value;
   var color = document.querySelector('input[name="pill-color"]:checked').value;
 
-  if (!name)  { alert("Please enter the medication name."); return; }
+  if (!name)  { showFormError("Please enter the medication name."); return; }
 
   var vibe = document.getElementById("f-vibe").value;
+  var vibeStrength = document.getElementById("f-vibe-strength").value;
   var med = { taker: taker, name: name, dose: dose, shape: shape, color: color,
-              vibePattern: vibe === "short" ? undefined : vibe };
+              vibePattern:  vibe === "short"   ? undefined : vibe,
+              vibeStrength: vibeStrength === "light" ? undefined : vibeStrength };
 
   if (editingIndex >= 0 && meds[editingIndex].medId) {
     med.medId = meds[editingIndex].medId;
@@ -1182,7 +1263,7 @@ function saveMed() {
 
   if (document.getElementById("sched-fixed").checked) {
     var times = getTimes();
-    if (!times.length) { alert("Please add at least one time."); return; }
+    if (!times.length) { showFormError("Please add at least one time."); return; }
     med.scheduleType = "fixed";
     med.times = times;
   } else if (document.getElementById("sched-interval").checked) {
@@ -1190,7 +1271,7 @@ function saveMed() {
     med.scheduleType  = "interval";
     med.intervalHours = getIntervalHours();
     if (!med.intervalHours || med.intervalHours < 1 || med.intervalHours > 168) {
-      alert("Please enter a number between 1 and 168 for the interval hours.");
+      showFormError("Please enter a number between 1 and 168 for the interval hours.");
       return;
     }
     med.startHour     = parseInt(startParts[0], 10);
@@ -1199,7 +1280,7 @@ function saveMed() {
                           ? meds[editingIndex].lastTakenTs
                           : 0;
   } else {
-    if (!weekMaskState) { alert("Please select at least one day of the week."); return; }
+    if (!weekMaskState) { showFormError("Please select at least one day of the week."); return; }
     var timeParts = document.getElementById("f-weekly-time").value.split(":");
     med.scheduleType = "weekly";
     med.weekMask     = weekMaskState;
@@ -1225,6 +1306,7 @@ function saveConfig() {
     settings: {
       snoozeMins:   parseInt(document.getElementById("snooze-mins").value, 10) || 15,
       privacyMode:  document.getElementById("privacy-mode").checked,
+      repeatSnooze: document.getElementById("repeat-snooze").checked,
       knownTakers:  knownTakers
     }
   };

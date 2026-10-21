@@ -14,7 +14,7 @@ console.log('PebbleMeds JS starting');
 // ---------------------------------------------------------------------------
 // Constants and Globals
 // ---------------------------------------------------------------------------
-var CONFIG_URL = 'https://bpiehler.github.io/PebbleMeds/src/pkjs/config.html';
+var configPage = require('./config_page');
 var CHUNK_SIZE = 200;
 
 var KEY_CONFIG_JSON  = 10000;
@@ -82,15 +82,21 @@ function logDoseAction(action, medIndex, ts) {
 }
 
 function getConfigUrl() {
+  var page = decodeURIComponent(configPage.HTML);
+
   try {
     var cfg = loadConfig();
     if (cfg) {
-      return CONFIG_URL + '#' + encodeURIComponent(JSON.stringify(cfg));
+      var json = JSON.stringify(JSON.stringify(cfg)).replace(/</g, '\\u003c');
+      page = page.replace(
+        '</head>',
+        '<script>window.PEBBLE_MEDS_CONFIG = ' + json + ';</scr' + 'ipt></head>'
+      );
     }
   } catch (e) {
-    console.log('Error building config URL: ' + e.message);
+    console.log('Error injecting config into page: ' + e.message);
   }
-  return CONFIG_URL;
+  return 'data:text/html;charset=utf-8,' + encodeURIComponent(page);
 }
 
 function sendConfigToWatch(cfg) {
@@ -149,7 +155,7 @@ Pebble.addEventListener('showConfiguration', function () {
   console.log('showConfiguration event');
   try {
     var url = getConfigUrl();
-    console.log('Opening config URL: ' + url);
+    console.log('Opening config page: ' + url.length + '-byte data: URI');
     Pebble.openURL(url);
   } catch (e) {
     console.log('Failed to open configuration: ' + e.message);

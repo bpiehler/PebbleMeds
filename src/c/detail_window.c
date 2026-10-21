@@ -305,6 +305,7 @@ static void select_click(ClickRecognizerRef rec, void *ctx) {
     }
 
     s_action_taken = true;
+    notifications_cancel_snooze(s_med_index, s_dose_time);
     dose_log_record(s_med_index, DOSE_TAKEN, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "taken", (uint32_t)s_dose_time);
 
@@ -343,6 +344,7 @@ static void up_click(ClickRecognizerRef rec, void *ctx) {
 
 static void down_click(ClickRecognizerRef rec, void *ctx) {
     s_action_taken = true;
+    notifications_cancel_snooze(s_med_index, s_dose_time);
     dose_log_record(s_med_index, DOSE_SKIPPED, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "skipped", (uint32_t)s_dose_time);
 
@@ -565,4 +567,11 @@ void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mo
         .unload = window_unload,
     });
     window_stack_push(s_window, true);
+}
+
+bool detail_window_alert_is_open(uint8_t med_index, time_t dose_time) {
+    return s_window != NULL
+        && s_mode == DETAIL_MODE_ALERT
+        && s_med_index == med_index
+        && s_dose_time == dose_time;
 }
