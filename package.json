@@ -56,18 +56,31 @@
         },
         {
           "type": "bitmap",
-          "name": "IMAGE_ICON_TAKEN",
-          "file": "images/icon_taken.png"
+          "name": "IMAGE_ACTION_CHECK",
+          "file": "images/action_bar_icon_check.png"
         },
         {
           "type": "bitmap",
-          "name": "IMAGE_ICON_SNOOZE",
-          "file": "images/icon_snooze.png"
+          "name": "IMAGE_ACTION_X",
+          "file": "images/action_bar_icon_x.png"
         },
         {
           "type": "bitmap",
-          "name": "IMAGE_ICON_SKIP",
-          "file": "images/icon_skip.png"
+          "name": "IMAGE_ACTION_SNOOZE",
+          "file": "images/action_bar_icon_snooze.png"
+        },
+        {
+          "type": "raw",
+          "name": "CONFIRMATION_ANIM",
+          "file": "data/confirmation.pdc",
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "flint",
+            "gabbro"
+          ]
         }
       ]
     },
