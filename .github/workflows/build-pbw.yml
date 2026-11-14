@@ -1,0 +1,100 @@
+name: Build PBW
+
+# Pull requests, pushes to main and published releases: run the tests, build
+# all platforms and upload the .pbw as a workflow artifact.
+# Releases, from the same build:
+# - Publishing a release attaches the .pbw to it.
+# - Each push to main moves the `latest` tag and updates the
+#   "Latest main build" prerelease, so the newest .pbw has a stable link:
+#   https://github.com/<owner>/<repo>/releases/download/latest/PebbleMeds.pbw
+
+on:
+  # Only main, so a branch with an open pull request is not built twice.
+  push:
+    branches:
+      - main
+  pull_request:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Jest covers the JS mirrors of the C scheduling code (see DEV_NOTES).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install test dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - uses: astral-sh/setup-uv@v5
+
+      # Pinned so the same commit always builds the same .pbw.
+      - name: Install Pebble SDK
+        run: |
+          uv tool install pebble-tool==5.2.0 --python 3.13
+          yes | pebble sdk install 4.44
+
+      - name: Build
+        run: pebble build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PebbleMeds-pbw
+          path: build/*.pbw
+
+  release:
+    needs: build
+    if: github.event_name == 'release' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.ref }}
+      # A newer push to main replaces an older one; a release run always finishes.
+      cancel-in-progress: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: PebbleMeds-pbw
+          path: dist
+
+      - name: Attach to the published release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/*.pbw --clobber --repo "$GITHUB_REPOSITORY"
+
+      # Tags pushed with the workflow token do not trigger workflows.
+      - name: Move the latest tag
+        if: github.event_name == 'push'
+        run: |
+          git tag -f latest "$GITHUB_SHA"
+          git push -f origin refs/tags/latest
+
+      - name: Update the latest main build
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest main build
+          body: Built from ${{ github.sha }}.
+          prerelease: true
+          make_latest: false
+          files: dist/*.pbw
