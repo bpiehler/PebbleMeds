@@ -122,9 +122,16 @@ void notifications_schedule_wakeups(void) {
 // Public: snooze — persist the desired wakeup time then reschedule
 // ---------------------------------------------------------------------------
 
+uint16_t notifications_default_snooze_mins(void) {
+    AppSettings *settings = med_list_get_settings();
+    return (settings->snoozeMins > 0) ? settings->snoozeMins : 15;
+}
+
 void notifications_schedule_snooze(uint8_t med_index, time_t dose_time) {
-    AppSettings *settings  = med_list_get_settings();
-    uint16_t snooze_mins   = (settings->snoozeMins > 0) ? settings->snoozeMins : 15;
+    notifications_schedule_snooze_for(med_index, dose_time, notifications_default_snooze_mins());
+}
+
+void notifications_schedule_snooze_for(uint8_t med_index, time_t dose_time, uint16_t snooze_mins) {
     time_t   snooze_t      = time(NULL) + (time_t)snooze_mins * 60;
     // Persist the wakeup time AND which dose was snoozed.  The wakeup handler
     // uses med_index + dose_time directly rather than re-searching by window,
