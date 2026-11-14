@@ -3,6 +3,7 @@
 #include "appmessage.h"
 #include "notifications.h"
 #include "dose_log.h"
+#include "ui_fonts.h"
 #include <pebble.h>
 
 // ---------------------------------------------------------------------------
@@ -443,9 +444,33 @@ static void window_load(Window *window) {
     int content_w = bounds.size.w;
 #endif
 
-    // Pill canvas — starts above screen; entry animation moves it into position.
+    // Text sizes come from the system text size setting. To fit all four
+    // lines below the pill: drop line gaps, then raise the pill, then step
+    // down a scale.
     int pill_x = (content_w - PILL_CANVAS_SIZE) / 2;
     int pill_y = 12;
+    int text_x = PBL_IF_ROUND_ELSE(20, 4);
+    int text_w = content_w - PBL_IF_ROUND_ELSE(40, 8);
+
+    UiScale scale = ui_scale_get();
+    int name_h, line_h;
+    while (true) {
+        name_h = ui_font_line_h(UI_FONT_TITLE, scale);
+        line_h = ui_font_line_h(UI_FONT_BODY_BOLD, scale) + 2;
+        // Pixels the name and three lines run past the bottom of the screen.
+        int over = pill_y + PILL_CANVAS_SIZE + 4 + name_h + line_h * 3 - bounds.size.h;
+        // Drop the 2px gap from each of the three lines.
+        if (over > 0) { line_h -= 2; over -= 6; }
+        // Raise the pill, keeping 2px above it.
+        if (over > 0 && over <= pill_y - 2) { pill_y -= over; over = 0; }
+        // Still too tall: try again one scale smaller.
+        if (over <= 0 || scale == UI_SCALE_NORMAL) break;
+        pill_y = 12;
+        scale--;
+    }
+    int text_y = pill_y + PILL_CANVAS_SIZE + 4;
+
+    // Pill canvas starts above screen; entry animation moves it into position.
     s_canvas_target_frame = GRect(pill_x, pill_y, PILL_CANVAS_SIZE, PILL_CANVAS_SIZE);
 
     GRect init_frame      = s_canvas_target_frame;
@@ -454,28 +479,27 @@ static void window_load(Window *window) {
     layer_set_update_proc(s_canvas_layer, canvas_update_proc);
     layer_add_child(root, s_canvas_layer);
 
-    // Text layers — larger fonts for readability.
-    int text_y = pill_y + PILL_CANVAS_SIZE + 4;
-    int text_x = PBL_IF_ROUND_ELSE(20, 4);
-    int text_w = content_w - PBL_IF_ROUND_ELSE(40, 8);
-
-    s_name_layer = text_layer_create(GRect(text_x, text_y, text_w, 30));
-    text_layer_set_font(s_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+    s_name_layer = text_layer_create(GRect(text_x, text_y, text_w, name_h));
+    text_layer_set_font(s_name_layer, ui_font(UI_FONT_TITLE, scale));
+    text_layer_set_overflow_mode(s_name_layer, GTextOverflowModeTrailingEllipsis);
     text_layer_set_text_alignment(s_name_layer, GTextAlignmentCenter);
     layer_add_child(root, text_layer_get_layer(s_name_layer));
 
-    s_taker_layer = text_layer_create(GRect(text_x, text_y + 30, text_w, 24));
-    text_layer_set_font(s_taker_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+    int y = text_y + name_h;
+    s_taker_layer = text_layer_create(GRect(text_x, y, text_w, line_h));
+    text_layer_set_font(s_taker_layer, ui_font(UI_FONT_BODY_BOLD, scale));
     text_layer_set_text_alignment(s_taker_layer, GTextAlignmentCenter);
     layer_add_child(root, text_layer_get_layer(s_taker_layer));
 
-    s_dose_layer = text_layer_create(GRect(text_x, text_y + 54, text_w, 24));
-    text_layer_set_font(s_dose_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+    y += line_h;
+    s_dose_layer = text_layer_create(GRect(text_x, y, text_w, line_h));
+    text_layer_set_font(s_dose_layer, ui_font(UI_FONT_BODY_BOLD, scale));
     text_layer_set_text_alignment(s_dose_layer, GTextAlignmentCenter);
     layer_add_child(root, text_layer_get_layer(s_dose_layer));
 
-    s_time_layer = text_layer_create(GRect(text_x, text_y + 80, text_w, 24));
-    text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
+    y += line_h;
+    s_time_layer = text_layer_create(GRect(text_x, y, text_w, line_h));
+    text_layer_set_font(s_time_layer, ui_font(UI_FONT_BODY, scale));
     text_layer_set_text_alignment(s_time_layer, GTextAlignmentCenter);
     layer_add_child(root, text_layer_get_layer(s_time_layer));
 
