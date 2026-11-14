@@ -95,6 +95,21 @@ The Rebble app (v1.0.6.8+) exposes `Pebble.deleteTimelinePin(id)` in addition to
 
 On `!PBL_COLOR` platforms (aplite, diorite, flint), pill shapes must NOT fill with a background color (the background is transparent). Drawing is outline-only (black stroke on device background).
 
+### Text Size
+
+`ui_fonts.c` maps the system Text Size setting (`preferred_content_size()`) to
+three scales: Small/Medium keep the original fixed layout, Large (the default on
+emery and gabbro) and Extra Large step fonts and row heights up. Screens ask
+`ui_font()` and `ui_font_line_h()` for a role (list header, row title, body)
+rather than naming Gothic sizes directly.
+
+- Gothic 36 ships in current firmware but has no SDK constant, so it is loaded
+  by name (`"RESOURCE_ID_GOTHIC_36_BOLD"`). `fonts_get_system_font()` returns
+  the fallback font for unknown keys, so `ui_fonts.c` compares against a key
+  that never exists and uses Gothic 28 when 36 is missing.
+- The detail screen must fit four lines under the pill. At large scales it
+  drops line gaps, then raises the pill, then steps down a scale.
+
 ### LSP Errors on pebble.h
 
 The LSP can't resolve `pebble.h` or Pebble SDK types. These are NOT real errors — `pebble build` resolves them correctly. Ignore all `pebble.h` file-not-found and unknown-type diagnostics in C files.
