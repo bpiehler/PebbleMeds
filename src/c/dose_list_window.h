@@ -6,3 +6,5 @@ void dose_list_window_refresh(void);
 // After a Taken/Skip action on a specific dose, advance past that dose for the
 // acted-upon med so the row immediately shows the next upcoming occurrence.
 void dose_list_window_refresh_after(uint8_t med_index, time_t dose_time);
+// Called every minute to keep relative due times current.
+void dose_list_window_tick(void);
