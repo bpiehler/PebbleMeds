@@ -3,6 +3,7 @@
 #include "appmessage.h"
 #include "notifications.h"
 #include "dose_log.h"
+#include "time_fmt.h"
 #include <pebble.h>
 
 // ---------------------------------------------------------------------------
@@ -64,9 +65,9 @@ static const int8_t WOBBLE_OFFSETS[] = {8, -8, 5, -5, 3, -2, 0};
 static Window            *s_window;
 static Layer             *s_canvas_layer;
 static TextLayer         *s_name_layer;
-static TextLayer         *s_taker_layer;
-static TextLayer         *s_dose_layer;
-static TextLayer         *s_time_layer;   // "Due: HH:MM [AM/PM]"
+static TextLayer         *s_who_layer;    // "Self · 10 mg"
+static TextLayer         *s_until_layer;  // "In 25 min"
+static TextLayer         *s_time_layer;   // "Due 9:00 AM"
 #ifdef PBL_RECT
 static ActionBarLayer    *s_action_bar;
 static GBitmap           *s_icon_taken;
@@ -100,9 +101,9 @@ void dose_list_window_refresh_after(uint8_t med_index, time_t dose_time);
 // ---------------------------------------------------------------------------
 
 static char s_name_buf[36];
-static char s_taker_buf[28];
-static char s_dose_buf[28];
-static char s_time_buf[24];
+static char s_who_buf[56];
+static char s_until_buf[24];
+static char s_time_buf[32];
 
 static void update_text(void) {
     MedEntry    *med      = med_list_get(s_med_index);
@@ -110,38 +111,31 @@ static void update_text(void) {
     if (!med) return;
 
     if (settings->privacyMode && !s_revealed) {
-        snprintf(s_name_buf,  sizeof(s_name_buf),  "Medication Due");
-        snprintf(s_taker_buf, sizeof(s_taker_buf), "%s", med->taker);
-        s_dose_buf[0] = '\0';
+        snprintf(s_name_buf, sizeof(s_name_buf), "Medication Due");
+        snprintf(s_who_buf,  sizeof(s_who_buf),  "%s", med->taker);
     } else {
-        snprintf(s_name_buf,  sizeof(s_name_buf),  "%s", med->name);
-        snprintf(s_taker_buf, sizeof(s_taker_buf), "%s", med->taker);
+        snprintf(s_name_buf, sizeof(s_name_buf), "%s", med->name);
         if (med->dose[0]) {
-            snprintf(s_dose_buf, sizeof(s_dose_buf), "%s", med->dose);
+            snprintf(s_who_buf, sizeof(s_who_buf), "%s \xc2\xb7 %s", med->taker, med->dose);
         } else {
-            s_dose_buf[0] = '\0';
+            snprintf(s_who_buf, sizeof(s_who_buf), "%s", med->taker);
         }
     }
 
-    // "Due: HH:MM" / "Due: H:MM AM"
+    // "In 25 min" above "Due 9:00 AM"
     if (s_dose_time > 0) {
-        struct tm *t = localtime(&s_dose_time);
-        if (clock_is_24h_style()) {
-            snprintf(s_time_buf, sizeof(s_time_buf), "Due: %02d:%02d",
-                     t->tm_hour, t->tm_min);
-        } else {
-            int h = t->tm_hour % 12;
-            if (!h) h = 12;
-            snprintf(s_time_buf, sizeof(s_time_buf), "Due: %d:%02d %s",
-                     h, t->tm_min, t->tm_hour >= 12 ? "PM" : "AM");
-        }
+        char when[24];
+        time_fmt_relative(s_dose_time, s_until_buf, sizeof(s_until_buf));
+        time_fmt_day_clock(s_dose_time, when, sizeof(when));
+        snprintf(s_time_buf, sizeof(s_time_buf), "Due %s", when);
     } else {
-        s_time_buf[0] = '\0';
+        s_until_buf[0] = '\0';
+        s_time_buf[0]  = '\0';
     }
 
     text_layer_set_text(s_name_layer,  s_name_buf);
-    text_layer_set_text(s_taker_layer, s_taker_buf);
-    text_layer_set_text(s_dose_layer,  s_dose_buf);
+    text_layer_set_text(s_who_layer,   s_who_buf);
+    text_layer_set_text(s_until_layer, s_until_buf);
     text_layer_set_text(s_time_layer,  s_time_buf);
 }
 
@@ -464,15 +458,16 @@ static void window_load(Window *window) {
     text_layer_set_text_alignment(s_name_layer, GTextAlignmentCenter);
     layer_add_child(root, text_layer_get_layer(s_name_layer));
 
-    s_taker_layer = text_layer_create(GRect(text_x, text_y + 30, text_w, 24));
-    text_layer_set_font(s_taker_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
-    text_layer_set_text_alignment(s_taker_layer, GTextAlignmentCenter);
-    layer_add_child(root, text_layer_get_layer(s_taker_layer));
+    s_who_layer = text_layer_create(GRect(text_x, text_y + 30, text_w, 24));
+    text_layer_set_font(s_who_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+    text_layer_set_text_alignment(s_who_layer, GTextAlignmentCenter);
+    text_layer_set_overflow_mode(s_who_layer, GTextOverflowModeTrailingEllipsis);
+    layer_add_child(root, text_layer_get_layer(s_who_layer));
 
-    s_dose_layer = text_layer_create(GRect(text_x, text_y + 54, text_w, 24));
-    text_layer_set_font(s_dose_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
-    text_layer_set_text_alignment(s_dose_layer, GTextAlignmentCenter);
-    layer_add_child(root, text_layer_get_layer(s_dose_layer));
+    s_until_layer = text_layer_create(GRect(text_x, text_y + 54, text_w, 24));
+    text_layer_set_font(s_until_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+    text_layer_set_text_alignment(s_until_layer, GTextAlignmentCenter);
+    layer_add_child(root, text_layer_get_layer(s_until_layer));
 
     s_time_layer = text_layer_create(GRect(text_x, text_y + 80, text_w, 24));
     text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
@@ -481,8 +476,8 @@ static void window_load(Window *window) {
 
 #ifdef PBL_ROUND
     text_layer_enable_screen_text_flow_and_paging(s_name_layer,  5);
-    text_layer_enable_screen_text_flow_and_paging(s_taker_layer, 5);
-    text_layer_enable_screen_text_flow_and_paging(s_dose_layer,  5);
+    text_layer_enable_screen_text_flow_and_paging(s_who_layer,   5);
+    text_layer_enable_screen_text_flow_and_paging(s_until_layer, 5);
     text_layer_enable_screen_text_flow_and_paging(s_time_layer,  5);
 
     s_hints_layer = layer_create(bounds);
@@ -532,8 +527,8 @@ static void window_unload(Window *window) {
 #endif
     layer_destroy(s_canvas_layer);
     text_layer_destroy(s_name_layer);
-    text_layer_destroy(s_taker_layer);
-    text_layer_destroy(s_dose_layer);
+    text_layer_destroy(s_who_layer);
+    text_layer_destroy(s_until_layer);
     text_layer_destroy(s_time_layer);
 
     if (s_shield_path) { gpath_destroy(s_shield_path); s_shield_path = NULL; }
@@ -565,4 +560,8 @@ void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mo
         .unload = window_unload,
     });
     window_stack_push(s_window, true);
+}
+
+void detail_window_tick(void) {
+    if (s_window && window_is_loaded(s_window)) update_text();
 }
