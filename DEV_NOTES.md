@@ -2,9 +2,26 @@
 
 ## Tools & Environment
 
-- Build: `pebble build` (Waf-based, SDK 4.9.169)
+- Build: `pebble build` (Waf-based, SDK 4.44, pebble-tool 5.2.0, as pinned in CI)
 - Test: `npx jest` (Jest, runs JS mirror tests — no emulator needed)
 - Format: No auto-formatter configured; maintain consistent C style manually
+- CI: `.github/workflows/build-pbw.yml` runs on pull requests, pushes to
+  `main` and published releases. Other branches build once they have a pull
+  request, or by hand from the Actions tab.
+  It runs `npm ci` and `npm test` (Jest), then installs the latest Pebble SDK
+  and runs `pebble build` for all platforms. The `.pbw` is uploaded as a
+  workflow artifact on the run's summary page.
+- Releases: a second job in the same workflow publishes the build.
+  - Publishing a release (for example `v1.0.6`, made on GitHub with
+    "Generate release notes") attaches the `.pbw` to it.
+  - Each push to `main` moves the `latest` tag to that commit and updates the
+    "Latest main build" prerelease, giving a stable download link:
+    `https://github.com/<owner>/<repo>/releases/download/latest/PebbleMeds.pbw`.
+    The tag is not named `main` because git would resolve `main` to the tag
+    instead of the branch in commands like `git log main`.
+    Releases need a tag, so `latest` is moved on each build. A clone that
+    already has the old tag must use `git fetch --tags --force` to update it;
+    plain `git fetch` and `git pull` are not affected.
 
 ## Architecture
 
