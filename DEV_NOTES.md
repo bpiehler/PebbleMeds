@@ -108,8 +108,10 @@ The LSP can't resolve `pebble.h` or Pebble SDK types. These are NOT real errors 
 The detail window follows the PebbleOS alarm popup (`alarm_popup.c`):
 
 - Up = Snooze, Select = Taken, Down = Skip, with the system action bar icons.
-  In alert mode Back also snoozes. From the list there is no snooze, so Up
-  does nothing and Back just closes.
+  Back also snoozes.
+- The dose list follows the Alarms app list: Select on a row opens an
+  `ActionMenu` (Taken, Skip) instead of the reminder screen. Both paths mark
+  doses through `dose_action_mark()`.
 - The backlight is left to the system (the wakeup handler already lights it
   briefly), so an unanswered reminder costs no extra battery. The reminder
   stays up until answered; if it closes some other way, `window_unload`
