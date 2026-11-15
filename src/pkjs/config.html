@@ -71,6 +71,15 @@
     margin-top: 2px;
   }
 
+  .row select {
+    padding: 6px 10px;
+    background: #0f3460;
+    border: 1px solid #e94560;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 15px;
+  }
+
   .row input[type="number"] {
     width: 70px;
     padding: 6px 10px;
@@ -493,12 +502,20 @@
   <div class="row">
     <div>
       <div class="label">Snooze Duration</div>
-      <div class="hint">Minutes before re-alerting an unacknowledged dose</div>
+      <div class="hint">How long a reminder waits before it comes back. You can pick another time on the watch.</div>
     </div>
-    <div style="display:flex;align-items:center;gap:6px;">
-      <input type="number" id="snooze-mins" min="1" max="60" value="15">
-      <span style="color:#888;font-size:13px;">min</span>
-    </div>
+    <select id="snooze-mins">
+      <option value="5">5 min</option>
+      <option value="10">10 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">1 hour</option>
+      <option value="120">2 hours</option>
+      <option value="240">4 hours</option>
+      <option value="360">6 hours</option>
+      <option value="480">8 hours</option>
+      <option value="720">12 hours</option>
+    </select>
   </div>
 
   <div class="row">
@@ -741,7 +758,7 @@ document.addEventListener("DOMContentLoaded", function () {
       meds = cfg.meds || [];
       if (cfg.settings) {
         if (cfg.settings.snoozeMins !== undefined) {
-          document.getElementById("snooze-mins").value = cfg.settings.snoozeMins;
+          setSnoozeMins(cfg.settings.snoozeMins);
         }
         if (cfg.settings.privacyMode !== undefined) {
           document.getElementById("privacy-mode").checked = cfg.settings.privacyMode;
@@ -1219,6 +1236,23 @@ function saveMed() {
 // ---------------------------------------------------------------------------
 // Save full config and return to watch
 // ---------------------------------------------------------------------------
+// Keeps a saved value that is not in the list, such as 20 from the old number field.
+function setSnoozeMins(mins) {
+  var sel = document.getElementById("snooze-mins");
+  var val = String(mins);
+  var found = false;
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === val) found = true;
+  }
+  if (!found) {
+    var opt = document.createElement("option");
+    opt.value = val;
+    opt.textContent = val + " min";
+    sel.appendChild(opt);
+  }
+  sel.value = val;
+}
+
 function saveConfig() {
   var cfg = {
     meds: meds,
