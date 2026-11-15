@@ -77,6 +77,15 @@ Before the heartbeat fix, wakeup chain breaks (app crash, watch reboot) were per
 - Wakeups may be cleared on watch reboot or app reinstall
 - There is NO "background app" concept in SDK 3/4 — the Wakeup API IS the background mechanism
 
+### Launcher Glance
+
+Like the Alarms app, the launcher shows the next dose under the app name:
+"8:00 AM Multivitamin", or "Sat, 8:00 AM Multivitamin" on a later day. Privacy
+mode leaves out the name. `glance_update()` runs in `deinit`, so every launch,
+including wakeups, refreshes it. It adds one slice per upcoming dose (up to 8),
+each expiring at its dose time, so the glance moves on while the app is
+closed. Aplite has no glances.
+
 ### Timeline Pin Management
 
 Pin IDs use the format `pebble-meds-{medId}-{timestamp}`. The `medId` is a stable UUID v4 assigned at medication creation (`config.html:saveMed()`) and persisted through edits. The `pushTimelinePins()` function in `timeline.js` stores a `medId → [pin IDs]` map in localStorage (`pebble_meds_timeline_pin_ids`). Before inserting new pins, it deletes all previously-tracked pins via `Pebble.deleteTimelinePin()` (available in Rebble app v1.0.6.8+). Backward-compat migration assigns `medId` to existing meds that lack one on first push.
