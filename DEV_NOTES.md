@@ -103,6 +103,25 @@ The LSP can't resolve `pebble.h` or Pebble SDK types. These are NOT real errors 
 
 `PropertyAnimation` objects must be destroyed via `property_animation_destroy()`, NOT `animation_destroy()`. The stopped handler must clear `s_prop_anim` BEFORE calling `animation_unschedule()` to prevent double-free in re-entrant stopped handler calls.
 
+### Reminder Screen (modeled on the system alarm)
+
+The detail window follows the PebbleOS alarm popup (`alarm_popup.c`):
+
+- Up = Snooze, Select = Taken, Down = Skip, with the system action bar icons.
+  In alert mode Back also snoozes. From the list there is no snooze, so Up
+  does nothing and Back just closes.
+- The backlight is left to the system (the wakeup handler already lights it
+  briefly), so an unanswered reminder costs no extra battery. The reminder
+  stays up until answered; if it closes some other way, `window_unload`
+  records an implicit snooze, as before.
+- Each action pushes `confirm_dialog` and then removes the detail window, so a
+  wakeup-launched app exits when the dialog times out (2 s, as the alarm's do).
+
+Assets copied from PebbleOS (Apache 2.0, listed in `NOTICE`): `action_bar_icon_check/x/snooze.png`
+and `Pebble_80x80_Generic_confirmation.pdc` (a draw command sequence, loaded as
+a `raw` resource). Aplite has no draw command support, so the resource is not
+built for it and the dialog shows text only.
+
 ### CloudPebble Compatibility
 
 The app uses `sdkVersion: "3"` in `appinfo.json` and flat `appKeys` format for compatibility with both CloudPebble and modern Rebble SDK. Manual `#define KEY_*` constants in `appmessage.c` prevent drift.

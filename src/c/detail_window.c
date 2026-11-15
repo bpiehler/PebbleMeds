@@ -3,6 +3,8 @@
 #include "appmessage.h"
 #include "notifications.h"
 #include "dose_log.h"
+#include "time_fmt.h"
+#include "confirm_dialog.h"
 #include <pebble.h>
 
 // ---------------------------------------------------------------------------
@@ -51,13 +53,6 @@ static const GPathInfo DROP_PATH_INFO = {
 };
 
 // ---------------------------------------------------------------------------
-// Snooze wobble
-// ---------------------------------------------------------------------------
-
-static const int8_t WOBBLE_OFFSETS[] = {8, -8, 5, -5, 3, -2, 0};
-#define WOBBLE_STEPS 7
-
-// ---------------------------------------------------------------------------
 // Window state
 // ---------------------------------------------------------------------------
 
@@ -67,21 +62,14 @@ static TextLayer         *s_name_layer;
 static TextLayer         *s_taker_layer;
 static TextLayer         *s_dose_layer;
 static TextLayer         *s_time_layer;   // "Due: HH:MM [AM/PM]"
-#ifdef PBL_RECT
 static ActionBarLayer    *s_action_bar;
-static GBitmap           *s_icon_taken;
+static GBitmap           *s_icon_check;
+static GBitmap           *s_icon_x;
 static GBitmap           *s_icon_snooze;
-static GBitmap           *s_icon_skip;
-#endif
-#ifdef PBL_ROUND
-static Layer             *s_hints_layer;
-#endif
 
 static GPath             *s_shield_path;
 static GPath             *s_drop_path;
 static PropertyAnimation *s_prop_anim;
-static AppTimer          *s_wobble_timer;
-static uint8_t            s_wobble_step;
 
 static uint8_t            s_med_index;
 static time_t             s_dose_time;
@@ -91,13 +79,16 @@ static bool               s_action_taken;
 static bool               s_entry_done;     // prevents entry anim replaying
 static GRect              s_canvas_target_frame;
 
-// Forward declarations — avoids circular include with dose_list_window.h
-void dose_list_window_refresh(void);
+// Forward declarations: avoids circular include with dose_list_window.h
 void dose_list_window_refresh_after(uint8_t med_index, time_t dose_time);
 
 // ---------------------------------------------------------------------------
-// Text helpers
+// Text
 // ---------------------------------------------------------------------------
+
+static bool details_hidden(void) {
+    return med_list_get_settings()->privacyMode && !s_revealed;
+}
 
 static char s_name_buf[36];
 static char s_taker_buf[28];
@@ -218,28 +209,18 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 }
 
 // ---------------------------------------------------------------------------
-// Animation helpers
+// Entry animation: pill drops in from above
 // ---------------------------------------------------------------------------
 
-// Cancel any in-progress PropertyAnimation.  Clears s_prop_anim BEFORE
-// calling animation_unschedule so that any stopped-handler invocation sees
-// NULL and exits early without double-freeing.
+// Clears s_prop_anim before unscheduling so the stopped handler exits early.
 static void cancel_current_anim(void) {
     if (!s_prop_anim) return;
     PropertyAnimation *pa = s_prop_anim;
-    s_prop_anim = NULL;                                         // clear first
-    animation_unschedule(property_animation_get_animation(pa)); // handler early-exits
+    s_prop_anim = NULL;
+    animation_unschedule(property_animation_get_animation(pa));
     property_animation_destroy(pa);
 }
 
-static void cancel_wobble(void) {
-    if (s_wobble_timer) {
-        app_timer_cancel(s_wobble_timer);
-        s_wobble_timer = NULL;
-    }
-}
-
-// Entry animation: pill drops in from above screen.
 static void entry_anim_stopped(Animation *anim, bool finished, void *ctx) {
     if (!s_prop_anim) return;
     PropertyAnimation *pa = s_prop_anim;
@@ -248,63 +229,21 @@ static void entry_anim_stopped(Animation *anim, bool finished, void *ctx) {
     layer_set_frame(s_canvas_layer, s_canvas_target_frame);
 }
 
-// Taken animation: pill slides off the bottom of the screen.
-static void taken_anim_stopped(Animation *anim, bool finished, void *ctx) {
-    if (!s_prop_anim) return;
-    PropertyAnimation *pa = s_prop_anim;
-    s_prop_anim = NULL;
-    property_animation_destroy(pa);
-    notifications_schedule_wakeups();
-    if (s_mode == DETAIL_MODE_BROWSE) {
-        dose_list_window_refresh_after(s_med_index, s_dose_time);
-    }
-    window_stack_pop(false);
-}
-
-// Skip animation: pill slides off the top of the screen.
-static void skip_anim_stopped(Animation *anim, bool finished, void *ctx) {
-    if (!s_prop_anim) return;
-    PropertyAnimation *pa = s_prop_anim;
-    s_prop_anim = NULL;
-    property_animation_destroy(pa);
-    notifications_schedule_wakeups();
-    if (s_mode == DETAIL_MODE_BROWSE) {
-        dose_list_window_refresh_after(s_med_index, s_dose_time);
-    }
-    window_stack_pop(false);
-}
-
-// Snooze wobble: timer-driven horizontal shake, then pop.
-static void wobble_step_cb(void *ctx) {
-    s_wobble_timer = NULL;
-    if (s_wobble_step >= WOBBLE_STEPS) {
-        layer_set_frame(s_canvas_layer, s_canvas_target_frame);
-        notifications_schedule_snooze(s_med_index, s_dose_time);
-        window_stack_pop(true);
-        return;
-    }
-    GRect frame = s_canvas_target_frame;
-    frame.origin.x += WOBBLE_OFFSETS[s_wobble_step++];
-    layer_set_frame(s_canvas_layer, frame);
-    s_wobble_timer = app_timer_register(40, wobble_step_cb, NULL);
-}
-
 // ---------------------------------------------------------------------------
-// Click handlers
+// Actions: like the system alarm, close the reminder and confirm the result
 // ---------------------------------------------------------------------------
 
-static void select_click(ClickRecognizerRef rec, void *ctx) {
-    AppSettings *settings = med_list_get_settings();
-
-    // Privacy mode: first press reveals, second press confirms Taken.
-    if (settings->privacyMode && !s_revealed) {
-        s_revealed = true;
-        update_text();
-        layer_mark_dirty(s_canvas_layer);
-        return;
-    }
-
+static void finish(const char *confirmation) {
     s_action_taken = true;
+    notifications_schedule_wakeups();
+    if (s_mode == DETAIL_MODE_BROWSE) {
+        dose_list_window_refresh_after(s_med_index, s_dose_time);
+    }
+    confirm_dialog_push(confirmation);
+    window_stack_remove(s_window, false);
+}
+
+static void do_taken(void) {
     dose_log_record(s_med_index, DOSE_TAKEN, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "taken", (uint32_t)s_dose_time);
 
@@ -314,104 +253,67 @@ static void select_click(ClickRecognizerRef rec, void *ctx) {
     if (med && med->scheduleType == SCHEDULE_INTERVAL) {
         med->lastTakenTs = (uint32_t)time(NULL);
     }
-
-    vibes_short_pulse();
-
-    cancel_current_anim();
-    GRect to = layer_get_frame(s_canvas_layer);
-    to.origin.y = layer_get_bounds(window_get_root_layer(s_window)).size.h;
-    s_prop_anim = property_animation_create_layer_frame(s_canvas_layer, NULL, &to);
-    Animation *base = property_animation_get_animation(s_prop_anim);
-    animation_set_duration(base, 200);
-    animation_set_curve(base, AnimationCurveEaseIn);
-    animation_set_handlers(base, (AnimationHandlers){ .stopped = taken_anim_stopped }, NULL);
-    animation_schedule(base);
+    finish("Taken");
 }
 
-static void up_click(ClickRecognizerRef rec, void *ctx) {
-    if (s_wobble_timer != NULL) return;   // wobble already running
-    s_action_taken = true;
+static void do_skip(void) {
+    dose_log_record(s_med_index, DOSE_SKIPPED, (uint32_t)s_dose_time);
+    appmessage_send_action(s_med_index, "skipped", (uint32_t)s_dose_time);
+    finish("Skipped");
+}
+
+static void do_snooze(uint16_t mins) {
     dose_log_record(s_med_index, DOSE_SNOOZED, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "snooze", (uint32_t)s_dose_time);
+    notifications_schedule_snooze_for(s_med_index, s_dose_time, mins);
 
-    cancel_current_anim();
-    // Snap to normal position so wobble starts from the correct origin.
-    layer_set_frame(s_canvas_layer, s_canvas_target_frame);
-    s_wobble_step  = 0;
-    s_wobble_timer = app_timer_register(0, wobble_step_cb, NULL);
+    char clock[12], text[40];
+    time_fmt_clock(time(NULL) + (time_t)mins * 60, clock, sizeof(clock));
+    // Time goes on its own line so it never splits
+    snprintf(text, sizeof(text), "Snoozed until\n%s", clock);
+    finish(text);
+}
+
+// ---------------------------------------------------------------------------
+// Buttons: Up = Snooze, Select = Taken, Down = Skip, Back = Snooze (alerts)
+// ---------------------------------------------------------------------------
+
+static void up_click(ClickRecognizerRef rec, void *ctx) {
+    if (s_action_taken) return;
+    do_snooze(notifications_default_snooze_mins());
+}
+
+static void select_click(ClickRecognizerRef rec, void *ctx) {
+    if (s_action_taken) return;
+    // Privacy mode: the first press reveals the medication.
+    if (details_hidden()) {
+        s_revealed = true;
+        update_text();
+        layer_mark_dirty(s_canvas_layer);
+        return;
+    }
+    do_taken();
 }
 
 static void down_click(ClickRecognizerRef rec, void *ctx) {
-    s_action_taken = true;
-    dose_log_record(s_med_index, DOSE_SKIPPED, (uint32_t)s_dose_time);
-    appmessage_send_action(s_med_index, "skipped", (uint32_t)s_dose_time);
+    if (s_action_taken) return;
+    do_skip();
+}
 
-    cancel_current_anim();
-    cancel_wobble();
-    // Animate pill off the top (inverse of the Taken slide-off-bottom).
-    GRect to = layer_get_frame(s_canvas_layer);
-    to.origin.y = -(PILL_CANVAS_SIZE + 10);
-    s_prop_anim = property_animation_create_layer_frame(s_canvas_layer, NULL, &to);
-    Animation *base = property_animation_get_animation(s_prop_anim);
-    animation_set_duration(base, 200);
-    animation_set_curve(base, AnimationCurveEaseIn);
-    animation_set_handlers(base, (AnimationHandlers){ .stopped = skip_anim_stopped }, NULL);
-    animation_schedule(base);
+static void back_click(ClickRecognizerRef rec, void *ctx) {
+    if (s_action_taken) return;
+    do_snooze(notifications_default_snooze_mins());
 }
 
 static void click_config_provider(void *ctx) {
     window_single_click_subscribe(BUTTON_ID_SELECT, select_click);
+    window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
+    // Snooze only applies to alerts; from the list, Back just closes.
     if (s_mode == DETAIL_MODE_ALERT) {
         window_single_click_subscribe(BUTTON_ID_UP, up_click);
+        window_single_click_subscribe(BUTTON_ID_BACK, back_click);
     }
-    window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
 }
-
-// ---------------------------------------------------------------------------
-// Icon hints (Round devices)
-// ---------------------------------------------------------------------------
-#ifdef PBL_ROUND
-static void hints_update_proc(Layer *layer, GContext *ctx) {
-    GRect bounds = layer_get_bounds(layer);
-    graphics_context_set_antialiased(ctx, true);
-    graphics_context_set_text_color(ctx, GColorBlack);
-    graphics_context_set_stroke_color(ctx, GColorBlack);
-    graphics_context_set_stroke_width(ctx, 3);
-
-    int cy = bounds.size.h / 2;
-    int rx = bounds.size.w;
-
-#if PBL_DISPLAY_WIDTH >= 200
-    // Gabbro (260×260): original hint positions
-    int x_inset = 54, x_check = 32, y_up = 82, y_down = 58;
-#else
-    // Chalk (180×180): tighter positions to stay within the smaller circle
-    int x_inset = 52, x_check = 28, y_up = 57, y_down = 40;
-#endif
-
-    // Snooze hint (Up) — only in alert context
-    if (s_mode == DETAIL_MODE_ALERT) {
-        graphics_draw_text(ctx, "Z", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                           GRect(rx - x_inset, cy - y_up, 24, 24),
-                           GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
-    }
-
-    // Taken hint (Select) — manual checkmark
-    GPoint p = GPoint(rx - x_check, cy);
-#if PBL_DISPLAY_WIDTH >= 200
-    graphics_draw_line(ctx, GPoint(p.x - 10, p.y - 1), GPoint(p.x - 4, p.y + 6));
-    graphics_draw_line(ctx, GPoint(p.x - 4,  p.y + 6), GPoint(p.x + 8, p.y - 10));
-#else
-    graphics_draw_line(ctx, GPoint(p.x - 7, p.y),     GPoint(p.x - 3, p.y + 5));
-    graphics_draw_line(ctx, GPoint(p.x - 3, p.y + 5), GPoint(p.x + 5, p.y - 7));
-#endif
-
-    // Skip hint (Down) - "X"
-    graphics_draw_text(ctx, "X", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                       GRect(rx - x_inset, cy + y_down, 24, 24),
-                       GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
-}
-#endif
 
 // ---------------------------------------------------------------------------
 // Window lifecycle
@@ -424,80 +326,66 @@ static void window_load(Window *window) {
     s_shield_path = gpath_create(&SHIELD_PATH_INFO);
     s_drop_path   = gpath_create(&DROP_PATH_INFO);
 
-    // Action bar (rectangular only) — icons replace the old text hint line.
-#ifdef PBL_RECT
+    // System action bar icons, as on the alarm screen.
+    s_icon_check  = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_ACTION_CHECK);
+    s_icon_x      = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_ACTION_X);
+    s_icon_snooze = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_ACTION_SNOOZE);
     s_action_bar  = action_bar_layer_create();
-    s_icon_taken  = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_ICON_TAKEN);
-    s_icon_snooze = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_ICON_SNOOZE);
-    s_icon_skip   = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_ICON_SKIP);
-    action_bar_layer_set_icon(s_action_bar, BUTTON_ID_SELECT, s_icon_taken);
     if (s_mode == DETAIL_MODE_ALERT) {
         action_bar_layer_set_icon(s_action_bar, BUTTON_ID_UP, s_icon_snooze);
     }
-    action_bar_layer_set_icon(s_action_bar, BUTTON_ID_DOWN, s_icon_skip);
+    action_bar_layer_set_icon(s_action_bar, BUTTON_ID_SELECT, s_icon_check);
+    action_bar_layer_set_icon(s_action_bar, BUTTON_ID_DOWN, s_icon_x);
     action_bar_layer_set_click_config_provider(s_action_bar, click_config_provider);
     action_bar_layer_add_to_window(s_action_bar, window);
+
+#ifdef PBL_RECT
+    int content_x = 0;
     int content_w = bounds.size.w - ACTION_BAR_WIDTH;
+    int text_inset = 4;
 #else
-    window_set_click_config_provider(window, click_config_provider);
-    int content_w = bounds.size.w;
+    int content_x = 12;
+    int content_w = bounds.size.w - ACTION_BAR_WIDTH - content_x;
+    int text_inset = 8;
 #endif
+    int text_x = content_x + text_inset;
+    int text_w = content_w - text_inset * 2;
 
-    // Pill canvas — starts above screen; entry animation moves it into position.
-    int pill_x = (content_w - PILL_CANVAS_SIZE) / 2;
-    int pill_y = 12;
+    int pill_x = content_x + (content_w - PILL_CANVAS_SIZE) / 2;
+    // Round screens narrow at the bottom, so start higher and pack the lines.
+    int pill_y = PBL_IF_ROUND_ELSE(4, 12);
+    int text_y = pill_y + PILL_CANVAS_SIZE + 4;
+
+    // Pill canvas starts above screen; entry animation moves it into position.
     s_canvas_target_frame = GRect(pill_x, pill_y, PILL_CANVAS_SIZE, PILL_CANVAS_SIZE);
-
     GRect init_frame      = s_canvas_target_frame;
     init_frame.origin.y   = -(PILL_CANVAS_SIZE);
     s_canvas_layer        = layer_create(init_frame);
     layer_set_update_proc(s_canvas_layer, canvas_update_proc);
     layer_add_child(root, s_canvas_layer);
 
-    // Text layers — larger fonts for readability.
-    int text_y = pill_y + PILL_CANVAS_SIZE + 4;
-    int text_x = PBL_IF_ROUND_ELSE(20, 4);
-    int text_w = content_w - PBL_IF_ROUND_ELSE(40, 8);
-
-    s_name_layer = text_layer_create(GRect(text_x, text_y, text_w, 30));
-    text_layer_set_font(s_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
-    text_layer_set_text_alignment(s_name_layer, GTextAlignmentCenter);
-    layer_add_child(root, text_layer_get_layer(s_name_layer));
-
-    s_taker_layer = text_layer_create(GRect(text_x, text_y + 30, text_w, 24));
-    text_layer_set_font(s_taker_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
-    text_layer_set_text_alignment(s_taker_layer, GTextAlignmentCenter);
-    layer_add_child(root, text_layer_get_layer(s_taker_layer));
-
-    s_dose_layer = text_layer_create(GRect(text_x, text_y + 54, text_w, 24));
-    text_layer_set_font(s_dose_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
-    text_layer_set_text_alignment(s_dose_layer, GTextAlignmentCenter);
-    layer_add_child(root, text_layer_get_layer(s_dose_layer));
-
-    s_time_layer = text_layer_create(GRect(text_x, text_y + 80, text_w, 24));
-    text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-    text_layer_set_text_alignment(s_time_layer, GTextAlignmentCenter);
-    layer_add_child(root, text_layer_get_layer(s_time_layer));
-
-#ifdef PBL_ROUND
-    text_layer_enable_screen_text_flow_and_paging(s_name_layer,  5);
-    text_layer_enable_screen_text_flow_and_paging(s_taker_layer, 5);
-    text_layer_enable_screen_text_flow_and_paging(s_dose_layer,  5);
-    text_layer_enable_screen_text_flow_and_paging(s_time_layer,  5);
-
-    s_hints_layer = layer_create(bounds);
-    layer_set_update_proc(s_hints_layer, hints_update_proc);
-    layer_add_child(root, s_hints_layer);
-#endif
+    struct { TextLayer **layer; const char *font; int y; int h; } rows[] = {
+        { &s_name_layer,  FONT_KEY_GOTHIC_24_BOLD, 0,                       30 },
+        { &s_taker_layer, FONT_KEY_GOTHIC_18_BOLD, PBL_IF_ROUND_ELSE(28, 30), 24 },
+        { &s_dose_layer,  FONT_KEY_GOTHIC_18_BOLD, PBL_IF_ROUND_ELSE(50, 54), 24 },
+        { &s_time_layer,  FONT_KEY_GOTHIC_18,      PBL_IF_ROUND_ELSE(72, 80), 24 },
+    };
+    for (unsigned i = 0; i < ARRAY_LENGTH(rows); i++) {
+        TextLayer *tl = text_layer_create(GRect(text_x, text_y + rows[i].y, text_w, rows[i].h));
+        text_layer_set_font(tl, fonts_get_system_font(rows[i].font));
+        text_layer_set_text_alignment(tl, GTextAlignmentCenter);
+        text_layer_set_background_color(tl, GColorClear);
+        layer_add_child(root, text_layer_get_layer(tl));
+        *rows[i].layer = tl;
+    }
 
     update_text();
 }
 
 static void window_appear(Window *window) {
-    if (s_entry_done) return;   // only play once per push
+    if (s_entry_done) return;   // only once per push
     s_entry_done = true;
 
-    // Entry animation: pill drops in from above with an ease-out bounce feel.
     GRect from_frame    = s_canvas_target_frame;
     from_frame.origin.y = -(PILL_CANVAS_SIZE);
     s_prop_anim = property_animation_create_layer_frame(
@@ -510,26 +398,20 @@ static void window_appear(Window *window) {
 }
 
 static void window_unload(Window *window) {
-    cancel_wobble();
     cancel_current_anim();
 
-    // Dismissed without an explicit action in alert context → implicit snooze.
-    // In browse mode, dismissing with no action is harmless.
-    if (!s_action_taken && s_mode == DETAIL_MODE_ALERT) {
+    // Alert closed without an action (app exit, another app): implicit snooze.
+    if (s_mode == DETAIL_MODE_ALERT && !s_action_taken) {
         dose_log_record(s_med_index, DOSE_SNOOZED, (uint32_t)s_dose_time);
         notifications_schedule_snooze(s_med_index, s_dose_time);
     }
 
-#ifdef PBL_RECT
-    if (s_icon_taken)  { gbitmap_destroy(s_icon_taken);  s_icon_taken  = NULL; }
-    if (s_icon_snooze) { gbitmap_destroy(s_icon_snooze); s_icon_snooze = NULL; }
-    if (s_icon_skip)   { gbitmap_destroy(s_icon_skip);   s_icon_skip   = NULL; }
     action_bar_layer_destroy(s_action_bar);
     s_action_bar = NULL;
-#endif
-#ifdef PBL_ROUND
-    if (s_hints_layer) { layer_destroy(s_hints_layer); s_hints_layer = NULL; }
-#endif
+    gbitmap_destroy(s_icon_check);  s_icon_check  = NULL;
+    gbitmap_destroy(s_icon_x);      s_icon_x      = NULL;
+    gbitmap_destroy(s_icon_snooze); s_icon_snooze = NULL;
+
     layer_destroy(s_canvas_layer);
     text_layer_destroy(s_name_layer);
     text_layer_destroy(s_taker_layer);
@@ -555,8 +437,6 @@ void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mo
     s_action_taken = false;
     s_entry_done   = false;
     s_prop_anim    = NULL;
-    s_wobble_timer = NULL;
-    s_wobble_step  = 0;
 
     s_window = window_create();
     window_set_window_handlers(s_window, (WindowHandlers){

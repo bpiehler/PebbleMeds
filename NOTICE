@@ -1,0 +1,10 @@
+PebbleMeds includes files from PebbleOS
+(https://github.com/coredevices/PebbleOS), Copyright Google LLC,
+licensed under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0):
+
+- resources/images/action_bar_icon_check.png
+- resources/images/action_bar_icon_snooze.png
+- resources/images/action_bar_icon_x.png
+- resources/data/confirmation.pdc
+  (from Pebble_80x80_Generic_confirmation.pdc)
