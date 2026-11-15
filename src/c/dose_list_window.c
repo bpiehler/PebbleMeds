@@ -2,6 +2,7 @@
 #include "detail_window.h"
 #include "med_list.h"
 #include "appmessage.h"
+#include "ui_fonts.h"
 #include <pebble.h>
 
 // ---------------------------------------------------------------------------
@@ -88,6 +89,13 @@ static void format_dose_time(time_t ts, char *buf, size_t buflen) {
 static Window    *s_window;
 static MenuLayer *s_menu_layer;
 static TextLayer *s_empty_layer;
+static UiScale    s_scale;
+
+// Row layout: title line, then subtitle line overlapping 2px of its padding.
+#define ROW_TOP 2
+static int16_t row_title_h(void) { return ui_font_line_h(UI_FONT_ROW_TITLE, s_scale); }
+static int16_t row_sub_y(void)   { return ROW_TOP + row_title_h() - 2; }
+static int16_t row_sub_h(void)   { return ui_font_line_h(UI_FONT_ROW_SUBTITLE, s_scale); }
 
 // ---------------------------------------------------------------------------
 // MenuLayer callbacks
@@ -99,20 +107,27 @@ static uint16_t get_num_sections(MenuLayer *layer, void *ctx) {
 
 static int16_t get_header_height(MenuLayer *layer, uint16_t section, void *ctx) {
 #ifdef PBL_ROUND
-    return 34;
+    return ui_font_line_h(UI_FONT_TITLE, s_scale) + 4;
 #else
-    return MENU_CELL_BASIC_HEADER_HEIGHT;
+    if (s_scale == UI_SCALE_NORMAL) return MENU_CELL_BASIC_HEADER_HEIGHT;
+    return ui_font_line_h(UI_FONT_LIST_HEADER, s_scale);
 #endif
 }
 
 static void draw_header(GContext *ctx, const Layer *cell_layer, uint16_t section, void *ctx_data) {
-#ifdef PBL_ROUND
     GRect bounds = layer_get_bounds(cell_layer);
+#ifdef PBL_ROUND
     graphics_context_set_text_color(ctx, GColorBlack);
-    graphics_draw_text(ctx, "Upcoming Doses", fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                       GRect(0, 0, bounds.size.w, 34), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    graphics_draw_text(ctx, "Upcoming Doses", ui_font(UI_FONT_TITLE, s_scale),
+                       GRect(0, 0, bounds.size.w, bounds.size.h), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 #else
-    menu_cell_basic_header_draw(ctx, cell_layer, "Upcoming Doses");
+    if (s_scale == UI_SCALE_NORMAL) {
+        menu_cell_basic_header_draw(ctx, cell_layer, "Upcoming Doses");
+        return;
+    }
+    graphics_context_set_text_color(ctx, GColorBlack);
+    graphics_draw_text(ctx, "Upcoming Doses", ui_font(UI_FONT_LIST_HEADER, s_scale),
+                       GRect(4, -2, bounds.size.w - 8, bounds.size.h + 2), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 #endif
 }
 
@@ -121,7 +136,7 @@ static uint16_t get_num_rows(MenuLayer *layer, uint16_t section, void *ctx) {
 }
 
 static int16_t get_cell_height(MenuLayer *layer, MenuIndex *index, void *ctx) {
-    return 44;
+    return row_sub_y() + row_sub_h() + 4;  // 44 at normal scale
 }
 
 static void draw_pill_mini(GContext *ctx, GRect bounds, PillShape shape, GColor color, bool highlighted) {
@@ -226,10 +241,10 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
     }
 
     graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
-    graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                       GRect(text_x, 2, text_w, 20), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
-    graphics_draw_text(ctx, subtitle, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(text_x, 22, text_w, 16), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+    graphics_draw_text(ctx, title, ui_font(UI_FONT_ROW_TITLE, s_scale),
+                       GRect(text_x, ROW_TOP, text_w, row_title_h() - 2), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+    graphics_draw_text(ctx, subtitle, ui_font(UI_FONT_ROW_SUBTITLE, s_scale),
+                       GRect(text_x, row_sub_y(), text_w, row_sub_h() - 2), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
 static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
@@ -244,6 +259,7 @@ static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
 static void window_load(Window *window) {
     Layer *root = window_get_root_layer(window);
     GRect bounds = layer_get_bounds(root);
+    s_scale = ui_scale_get();
 
     s_menu_layer = menu_layer_create(bounds);
     menu_layer_set_callbacks(s_menu_layer, NULL, (MenuLayerCallbacks){
@@ -266,9 +282,11 @@ static void window_load(Window *window) {
     layer_add_child(root, menu_layer_get_layer(s_menu_layer));
 
     // Empty state
-    s_empty_layer = text_layer_create(GRect(0, bounds.size.h / 2 - 30, bounds.size.w, 60));
+    // Room for 3 lines: the message can wrap at larger sizes.
+    int16_t empty_h = ui_font_line_h(UI_FONT_BODY_BOLD, s_scale) * 3 + 4;
+    s_empty_layer = text_layer_create(GRect(0, bounds.size.h / 2 - empty_h / 2, bounds.size.w, empty_h));
     text_layer_set_text(s_empty_layer, "No meds scheduled.\nUse the phone app!");
-    text_layer_set_font(s_empty_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+    text_layer_set_font(s_empty_layer, ui_font(UI_FONT_BODY_BOLD, s_scale));
     text_layer_set_text_alignment(s_empty_layer, GTextAlignmentCenter);
     layer_add_child(root, text_layer_get_layer(s_empty_layer));
 
