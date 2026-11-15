@@ -131,6 +131,19 @@ describe('pushTimelinePins', function () {
     expect(Pebble.insertTimelinePin).not.toHaveBeenCalled();
   });
 
+  test('inserts no pins for a med that is off', function () {
+    var cfg = {
+      meds: [
+        { medId: MED_A_ID, name: 'Aspirin', taker: 'Alice', scheduleType: 'fixed',
+          times: [{ h: 8, m: 0 }], paused: true },
+      ],
+      settings: {},
+    };
+    schedule.getNextDoseTimes.mockReturnValue([FIXED_TS + 100]);
+    pushTimelinePins(cfg);
+    expect(Pebble.insertTimelinePin).not.toHaveBeenCalled();
+  });
+
   test('stores pin id map keyed by medId, not array index', function () {
     var cfg = {
       meds: [

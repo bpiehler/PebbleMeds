@@ -116,6 +116,8 @@
   }
 
   .med-item-info { flex: 1; min-width: 0; }
+  .med-item.paused .med-item-info,
+  .med-item.paused .med-item-swatch { opacity: 0.45; }
 
   .med-item-name {
     font-weight: 600;
@@ -142,7 +144,7 @@
     flex-shrink: 0;
   }
 
-  .med-item-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .med-item-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
   .btn-icon {
     background: none;
@@ -865,7 +867,7 @@ function renderMedList() {
 
 function buildMedItem(med, index) {
   var div = document.createElement("div");
-  div.className = "med-item";
+  div.className = med.paused ? "med-item paused" : "med-item";
 
   // Color swatch
   var colorHex = "#FFFFFF";
@@ -900,6 +902,7 @@ function buildMedItem(med, index) {
   } else {
     subParts.push("Every " + med.intervalHours + "h");
   }
+  if (med.paused) subParts.unshift("Paused");
   sub.textContent = subParts.join(" · ");
 
   info.appendChild(nameEl);
@@ -920,6 +923,26 @@ function buildMedItem(med, index) {
   delBtn.style.color = "#e94560";
   delBtn.onclick = (function (i) { return function () { deleteMed(i); }; })(index);
 
+  // On/off switch, as in the system Alarms list: off pauses the med's reminders.
+  var toggle = document.createElement("label");
+  toggle.className = "toggle-wrap";
+  toggle.title = "Pause or resume reminders";
+  var toggleInput = document.createElement("input");
+  toggleInput.type = "checkbox";
+  toggleInput.checked = !med.paused;
+  toggleInput.onchange = (function (i) {
+    return function () {
+      if (this.checked) delete meds[i].paused;
+      else meds[i].paused = true;
+      renderMedList();
+    };
+  })(index);
+  var slider = document.createElement("span");
+  slider.className = "slider";
+  toggle.appendChild(toggleInput);
+  toggle.appendChild(slider);
+
+  actions.appendChild(toggle);
   actions.appendChild(editBtn);
   actions.appendChild(delBtn);
 
@@ -1174,6 +1197,7 @@ function saveMed() {
   var med = { taker: taker, name: name, dose: dose, shape: shape, color: color,
               vibePattern: vibe === "short" ? undefined : vibe };
 
+  if (editingIndex >= 0 && meds[editingIndex].paused) med.paused = true;
   if (editingIndex >= 0 && meds[editingIndex].medId) {
     med.medId = meds[editingIndex].medId;
   } else {

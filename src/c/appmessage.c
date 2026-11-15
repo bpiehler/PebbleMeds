@@ -200,6 +200,11 @@ static void parse_med_object(const char *js, size_t len, MedEntry *med) {
             else
                 med->vibePattern = MED_VIBE_SHORT;
 
+        } else if (jsmn_eq(js, key, "paused")) {
+            char buf[8];
+            jsmn_str(js, val, buf, sizeof(buf));
+            med->paused = (strcmp(buf, "true") == 0);
+
         } else if (jsmn_eq(js, key, "times") && val->type == JSMN_ARRAY) {
             uint8_t count = (uint8_t)(val->size > 4 ? 4 : val->size);
             med->timeCount = count;
