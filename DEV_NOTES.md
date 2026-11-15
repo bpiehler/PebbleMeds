@@ -112,6 +112,11 @@ The detail window follows the PebbleOS alarm popup (`alarm_popup.c`):
 - The dose list follows the Alarms app list: Select on a row opens an
   `ActionMenu` (Taken, Skip) instead of the reminder screen. Both paths mark
   doses through `dose_action_mark()`.
+- The row menu adds "Undo Taken 8:00 AM" (or "Undo Skipped") for the med's
+  latest mark from the last 24 hours. `dose_action_clear()` removes the log
+  entry and sends `undo` to the phone, which drops it from its log and, for an
+  interval med, sets `lastTakenTs` back to the previous Taken dose and resends
+  the config. Aplite has no undo, to save memory.
 - The backlight is left to the system (the wakeup handler already lights it
   briefly), so an unanswered reminder costs no extra battery. The reminder
   stays up until answered; if it closes some other way, `window_unload`

@@ -1,6 +1,8 @@
 #include "dose_list_window.h"
 #include "dose_action.h"
 #include "confirm_dialog.h"
+#include "dose_log.h"
+#include "time_fmt.h"
 #include "med_list.h"
 #include "appmessage.h"
 #include <pebble.h>
@@ -239,6 +241,15 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
 
 static DoseRow s_menu_row;
 
+// Aplite is short on memory, so it has no undo, as it has no snooze menu.
+#if !defined(PBL_PLATFORM_APLITE)
+#define HAS_UNDO 1
+#define ROW_UNDO 3  // action data for the undo item, after the DoseAction values
+#define UNDO_WINDOW_SECS (24 * 3600)
+static DoseLogEntry s_undo_mark;
+static char         s_undo_label[32];
+#endif
+
 static void row_action_performed(ActionMenu *menu, const ActionMenuItem *item, void *ctx) {
     // Handled in row_menu_did_close, once the menu has closed.
 }
@@ -246,7 +257,16 @@ static void row_action_performed(ActionMenu *menu, const ActionMenuItem *item, v
 static void row_menu_did_close(ActionMenu *menu, const ActionMenuItem *performed, void *ctx) {
     action_menu_hierarchy_destroy(action_menu_get_root_level(menu), NULL, NULL);
     if (!performed) return;
-    DoseAction action = (DoseAction)(uintptr_t)action_menu_item_get_action_data(performed);
+    uintptr_t choice = (uintptr_t)action_menu_item_get_action_data(performed);
+#ifdef HAS_UNDO
+    if (choice == ROW_UNDO) {
+        dose_action_clear(s_undo_mark.med_index, (time_t)s_undo_mark.ts);
+        dose_list_window_refresh();
+        confirm_dialog_push("Undone");
+        return;
+    }
+#endif
+    DoseAction action = (DoseAction)choice;
     dose_action_mark(s_menu_row.med_index, s_menu_row.dose_time, action);
     dose_list_window_refresh_after(s_menu_row.med_index, s_menu_row.dose_time);
     confirm_dialog_push(action == DOSE_TAKEN ? "Taken" : "Skipped");
@@ -256,9 +276,21 @@ static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
     if (s_row_count == 0) return;
     s_menu_row = s_rows[index->row];
 
-    ActionMenuLevel *root = action_menu_level_create(2);
+    ActionMenuLevel *root = action_menu_level_create(3);
     action_menu_level_add_action(root, "Taken", row_action_performed, (void *)(uintptr_t)DOSE_TAKEN);
     action_menu_level_add_action(root, "Skip", row_action_performed, (void *)(uintptr_t)DOSE_SKIPPED);
+
+#ifdef HAS_UNDO
+    // Offer to undo this med's latest mark from the last day, e.g. "Undo Taken 8:00 AM".
+    uint32_t since = (uint32_t)(time(NULL) - UNDO_WINDOW_SECS);
+    if (dose_log_last_mark(s_menu_row.med_index, since, &s_undo_mark)) {
+        char clock[12];
+        time_fmt_clock((time_t)s_undo_mark.ts, clock, sizeof(clock));
+        snprintf(s_undo_label, sizeof(s_undo_label), "Undo %s %s",
+                 s_undo_mark.action == DOSE_TAKEN ? "Taken" : "Skipped", clock);
+        action_menu_level_add_action(root, s_undo_label, row_action_performed, (void *)(uintptr_t)ROW_UNDO);
+    }
+#endif
     ActionMenuConfig config = {
         .root_level = root,
         .colors = {

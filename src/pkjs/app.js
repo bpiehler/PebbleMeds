@@ -81,6 +81,41 @@ function logDoseAction(action, medIndex, ts) {
   }
 }
 
+// Removes a dose's Taken or Skipped entry. An interval med then counts from
+// its previous Taken dose.
+function undoDoseAction(medIndex, ts) {
+  var log = [];
+  try {
+    var raw = localStorage.getItem('pebble_meds_log');
+    if (raw) log = JSON.parse(raw);
+  } catch (e) {}
+  log = log.filter(function (entry) {
+    return !(entry.medIndex === medIndex && entry.ts === ts &&
+             (entry.status === 'taken' || entry.status === 'skipped'));
+  });
+  try {
+    localStorage.setItem('pebble_meds_log', JSON.stringify(log));
+  } catch (e) {
+    console.log('localStorage: undoDoseAction failed: ' + e.message);
+  }
+
+  var cfg = loadConfig();
+  var med = cfg && cfg.meds[medIndex];
+  if (!med || med.scheduleType !== 'interval') return;
+  var last = 0;
+  log.forEach(function (entry) {
+    if (entry.medIndex === medIndex && entry.status === 'taken' && entry.ts > last) last = entry.ts;
+  });
+  if (last) med.lastTakenTs = last;
+  else delete med.lastTakenTs;
+  saveConfig(cfg);
+  sendConfigToWatch(cfg);
+  try {
+    var timeline = require('./timeline');
+    if (timeline && timeline.pushTimelinePins) timeline.pushTimelinePins(cfg);
+  } catch (e) {}
+}
+
 function getConfigUrl() {
   try {
     var cfg = loadConfig();
@@ -200,6 +235,11 @@ Pebble.addEventListener('appmessage', function (e) {
       var action   = msg[KEY_ACTION];
       var medIndex = msg[KEY_MED_INDEX];
       var doseTs   = msg[KEY_DOSE_TS] || Math.floor(Date.now() / 1000);
+
+      if (action === 'undo') {
+        undoDoseAction(medIndex, doseTs);
+        return;
+      }
 
       logDoseAction(action, medIndex, doseTs);
 
