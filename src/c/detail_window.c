@@ -87,6 +87,7 @@ static uint8_t            s_med_index;
 static time_t             s_dose_time;
 static DetailWindowMode   s_mode;
 static bool               s_revealed;
+static bool               s_can_act;        // Taken and Skip are allowed
 static bool               s_action_taken;
 static bool               s_entry_done;     // prevents entry anim replaying
 static GRect              s_canvas_target_frame;
@@ -94,6 +95,13 @@ static GRect              s_canvas_target_frame;
 // Forward declarations — avoids circular include with dose_list_window.h
 void dose_list_window_refresh(void);
 void dose_list_window_refresh_after(uint8_t med_index, time_t dose_time);
+
+// A dose further ahead than the early limit can only be viewed.
+static bool dose_can_act(void) {
+    if (s_mode == DETAIL_MODE_ALERT) return true;
+    uint16_t limit = med_list_get_settings()->earlyLimitMins;
+    return limit == 0 || s_dose_time - time(NULL) <= (time_t)limit * 60;
+}
 
 // ---------------------------------------------------------------------------
 // Text helpers
@@ -303,6 +311,7 @@ static void select_click(ClickRecognizerRef rec, void *ctx) {
         layer_mark_dirty(s_canvas_layer);
         return;
     }
+    if (!s_can_act) return;
 
     s_action_taken = true;
     dose_log_record(s_med_index, DOSE_TAKEN, (uint32_t)s_dose_time);
@@ -364,7 +373,9 @@ static void click_config_provider(void *ctx) {
     if (s_mode == DETAIL_MODE_ALERT) {
         window_single_click_subscribe(BUTTON_ID_UP, up_click);
     }
-    window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
+    if (s_can_act) {
+        window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -395,6 +406,8 @@ static void hints_update_proc(Layer *layer, GContext *ctx) {
                            GRect(rx - x_inset, cy - y_up, 24, 24),
                            GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
     }
+
+    if (!s_can_act) return;
 
     // Taken hint (Select) — manual checkmark
     GPoint p = GPoint(rx - x_check, cy);
@@ -436,8 +449,13 @@ static void window_load(Window *window) {
     }
     action_bar_layer_set_icon(s_action_bar, BUTTON_ID_DOWN, s_icon_skip);
     action_bar_layer_set_click_config_provider(s_action_bar, click_config_provider);
-    action_bar_layer_add_to_window(s_action_bar, window);
-    int content_w = bounds.size.w - ACTION_BAR_WIDTH;
+    int content_w = bounds.size.w;
+    if (s_can_act) {
+        action_bar_layer_add_to_window(s_action_bar, window);
+        content_w -= ACTION_BAR_WIDTH;
+    } else {
+        window_set_click_config_provider(window, click_config_provider);
+    }
 #else
     window_set_click_config_provider(window, click_config_provider);
     int content_w = bounds.size.w;
@@ -552,6 +570,7 @@ void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mo
     s_dose_time    = dose_time;
     s_mode         = mode;
     s_revealed     = false;
+    s_can_act      = dose_can_act();
     s_action_taken = false;
     s_entry_done   = false;
     s_prop_anim    = NULL;
