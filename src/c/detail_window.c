@@ -3,6 +3,7 @@
 #include "appmessage.h"
 #include "notifications.h"
 #include "dose_log.h"
+#include "skip_confirm.h"
 #include <pebble.h>
 
 // ---------------------------------------------------------------------------
@@ -341,7 +342,7 @@ static void up_click(ClickRecognizerRef rec, void *ctx) {
     s_wobble_timer = app_timer_register(0, wobble_step_cb, NULL);
 }
 
-static void down_click(ClickRecognizerRef rec, void *ctx) {
+static void do_skip(void) {
     s_action_taken = true;
     dose_log_record(s_med_index, DOSE_SKIPPED, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "skipped", (uint32_t)s_dose_time);
@@ -357,6 +358,11 @@ static void down_click(ClickRecognizerRef rec, void *ctx) {
     animation_set_curve(base, AnimationCurveEaseIn);
     animation_set_handlers(base, (AnimationHandlers){ .stopped = skip_anim_stopped }, NULL);
     animation_schedule(base);
+}
+
+// Skipping can't be undone, so ask first.
+static void down_click(ClickRecognizerRef rec, void *ctx) {
+    skip_confirm_push(do_skip);
 }
 
 static void click_config_provider(void *ctx) {
