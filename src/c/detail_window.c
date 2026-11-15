@@ -57,6 +57,10 @@ static const GPathInfo DROP_PATH_INFO = {
 static const int8_t WOBBLE_OFFSETS[] = {8, -8, 5, -5, 3, -2, 0};
 #define WOBBLE_STEPS 7
 
+// An unanswered reminder buzzes again each minute, then snoozes itself.
+#define ALERT_REPEAT_MS (60 * 1000)
+#define ALERT_REPEATS   4
+
 // ---------------------------------------------------------------------------
 // Window state
 // ---------------------------------------------------------------------------
@@ -82,6 +86,8 @@ static GPath             *s_drop_path;
 static PropertyAnimation *s_prop_anim;
 static AppTimer          *s_wobble_timer;
 static uint8_t            s_wobble_step;
+static AppTimer          *s_alert_timer;
+static uint8_t            s_alert_repeats;
 
 static uint8_t            s_med_index;
 static time_t             s_dose_time;
@@ -290,11 +296,35 @@ static void wobble_step_cb(void *ctx) {
 }
 
 // ---------------------------------------------------------------------------
+// Repeat alert
+// ---------------------------------------------------------------------------
+
+static void stop_alert_repeat(void) {
+    if (s_alert_timer) {
+        app_timer_cancel(s_alert_timer);
+        s_alert_timer = NULL;
+    }
+}
+
+// Closing the reminder unanswered snoozes it in window_unload.
+static void alert_repeat_cb(void *ctx) {
+    s_alert_timer = NULL;
+    if (s_alert_repeats >= ALERT_REPEATS) {
+        window_stack_remove(s_window, true);
+        return;
+    }
+    s_alert_repeats++;
+    notifications_alert(s_med_index);
+    s_alert_timer = app_timer_register(ALERT_REPEAT_MS, alert_repeat_cb, NULL);
+}
+
+// ---------------------------------------------------------------------------
 // Click handlers
 // ---------------------------------------------------------------------------
 
 static void select_click(ClickRecognizerRef rec, void *ctx) {
     AppSettings *settings = med_list_get_settings();
+    stop_alert_repeat();
 
     // Privacy mode: first press reveals, second press confirms Taken.
     if (settings->privacyMode && !s_revealed) {
@@ -330,6 +360,7 @@ static void select_click(ClickRecognizerRef rec, void *ctx) {
 
 static void up_click(ClickRecognizerRef rec, void *ctx) {
     if (s_wobble_timer != NULL) return;   // wobble already running
+    stop_alert_repeat();
     s_action_taken = true;
     dose_log_record(s_med_index, DOSE_SNOOZED, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "snooze", (uint32_t)s_dose_time);
@@ -342,6 +373,7 @@ static void up_click(ClickRecognizerRef rec, void *ctx) {
 }
 
 static void down_click(ClickRecognizerRef rec, void *ctx) {
+    stop_alert_repeat();
     s_action_taken = true;
     dose_log_record(s_med_index, DOSE_SKIPPED, (uint32_t)s_dose_time);
     appmessage_send_action(s_med_index, "skipped", (uint32_t)s_dose_time);
@@ -510,6 +542,7 @@ static void window_appear(Window *window) {
 }
 
 static void window_unload(Window *window) {
+    stop_alert_repeat();
     cancel_wobble();
     cancel_current_anim();
 
@@ -557,6 +590,9 @@ void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mo
     s_prop_anim    = NULL;
     s_wobble_timer = NULL;
     s_wobble_step  = 0;
+    s_alert_repeats = 0;
+    s_alert_timer  = (mode == DETAIL_MODE_ALERT)
+                   ? app_timer_register(ALERT_REPEAT_MS, alert_repeat_cb, NULL) : NULL;
 
     s_window = window_create();
     window_set_window_handlers(s_window, (WindowHandlers){

@@ -77,6 +77,13 @@ Before the heartbeat fix, wakeup chain breaks (app crash, watch reboot) were per
 - Wakeups may be cleared on watch reboot or app reinstall
 - There is NO "background app" concept in SDK 3/4 — the Wakeup API IS the background mechanism
 
+### Unanswered Reminders
+
+A reminder buzzes again each minute (`ALERT_REPEAT_MS`, `ALERT_REPEATS` in
+`detail_window.c`). After the last buzz it closes itself, and closing a
+reminder without an answer snoozes it. So an ignored dose comes back every
+`snoozeMins` until it is marked. Any button press stops the repeat.
+
 ### Timeline Pin Management
 
 Pin IDs use the format `pebble-meds-{medId}-{timestamp}`. The `medId` is a stable UUID v4 assigned at medication creation (`config.html:saveMed()`) and persisted through edits. The `pushTimelinePins()` function in `timeline.js` stores a `medId → [pin IDs]` map in localStorage (`pebble_meds_timeline_pin_ids`). Before inserting new pins, it deletes all previously-tracked pins via `Pebble.deleteTimelinePin()` (available in Rebble app v1.0.6.8+). Backward-compat migration assigns `medId` to existing meds that lack one on first push.

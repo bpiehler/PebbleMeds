@@ -25,6 +25,12 @@ static void fire_vibe(uint8_t vibe_pattern) {
     }
 }
 
+void notifications_alert(uint8_t med_index) {
+    MedEntry *med = med_list_get(med_index);
+    light_enable_interaction();
+    fire_vibe(med ? med->vibePattern : MED_VIBE_SHORT);
+}
+
 // ---------------------------------------------------------------------------
 // Dose event collection for wakeup scheduling
 // ---------------------------------------------------------------------------
