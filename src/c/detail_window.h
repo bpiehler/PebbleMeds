@@ -7,3 +7,5 @@ typedef enum {
 } DetailWindowMode;
 
 void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mode);
+// Called every minute to keep "In 25 min" current.
+void detail_window_tick(void);

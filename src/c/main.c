@@ -1,6 +1,7 @@
 #include <pebble.h>
 #include "med_list.h"
 #include "dose_list_window.h"
+#include "detail_window.h"
 #include "appmessage.h"
 #include "notifications.h"
 #include "dose_log.h"
@@ -19,6 +20,12 @@ static void handle_timeline_launch(uint32_t launch_code) {
   // Called when app is launched by a Timeline pin action.
   // launch_code 1 = Taken, 2 = Snooze
   notifications_handle_timeline_action(launch_code);
+}
+
+// One minute tick drives the relative due times on every screen.
+static void minute_tick(struct tm *tick_time, TimeUnits changed) {
+  dose_list_window_tick();
+  detail_window_tick();
 }
 
 // ---------------------------------------------------------------------------
@@ -50,9 +57,12 @@ static void init(void) {
 
   // Schedule the next batch of wakeups (up to 8).
   notifications_schedule_wakeups();
+
+  tick_timer_service_subscribe(MINUTE_UNIT, minute_tick);
 }
 
 static void deinit(void) {
+  tick_timer_service_unsubscribe();
   // Persist current medication list and state before exit.
   dose_log_deinit();
   med_list_deinit();

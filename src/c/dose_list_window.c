@@ -2,6 +2,7 @@
 #include "detail_window.h"
 #include "med_list.h"
 #include "appmessage.h"
+#include "time_fmt.h"
 #include <pebble.h>
 
 // ---------------------------------------------------------------------------
@@ -15,6 +16,16 @@ typedef struct {
 
 static DoseRow  s_rows[MED_MAX];
 static uint8_t  s_row_count = 0;
+static bool     s_show_taker;  // only when more than one person takes meds
+static bool     s_show_clock;     // clock times fit on every row
+static bool     s_clock_checked;  // s_show_clock and the columns are current
+#define SUBTITLE_LEN 64          // relative time and taker
+#ifndef MAX
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
 
 // ---------------------------------------------------------------------------
 // Build and sort the dose row list
@@ -40,6 +51,14 @@ static void build_rows(uint8_t skip_med_index, time_t skip_after) {
         s_row_count++;
     }
 
+    s_show_taker = false;
+    s_clock_checked = false;
+    MedEntry *first = (s_row_count > 0) ? med_list_get(s_rows[0].med_index) : NULL;
+    for (uint8_t i = 1; first && i < s_row_count; i++) {
+        MedEntry *m = med_list_get(s_rows[i].med_index);
+        if (m && strcmp(m->taker, first->taker) != 0) { s_show_taker = true; break; }
+    }
+
     // Insertion sort by dose_time (at most 16 elements)
     for (uint8_t i = 1; i < s_row_count; i++) {
         DoseRow key = s_rows[i];
@@ -49,35 +68,6 @@ static void build_rows(uint8_t skip_med_index, time_t skip_after) {
             j--;
         }
         s_rows[j + 1] = key;
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Time formatting
-// ---------------------------------------------------------------------------
-
-static void format_dose_time(time_t ts, char *buf, size_t buflen) {
-    time_t now = time(NULL);
-    struct tm t_now = *localtime(&now);
-    struct tm t     = *localtime(&ts);
-
-    bool is_today = (t.tm_yday == t_now.tm_yday && t.tm_year == t_now.tm_year);
-
-    if (clock_is_24h_style()) {
-        if (is_today) {
-            snprintf(buf, buflen, "%02d:%02d", t.tm_hour, t.tm_min);
-        } else {
-            snprintf(buf, buflen, "Tmrw %02d:%02d", t.tm_hour, t.tm_min);
-        }
-    } else {
-        int h = t.tm_hour % 12;
-        if (h == 0) h = 12;
-        const char *ampm = (t.tm_hour >= 12) ? "p" : "a";
-        if (is_today) {
-            snprintf(buf, buflen, "%d:%02d%s", h, t.tm_min, ampm);
-        } else {
-            snprintf(buf, buflen, "Tmrw %d:%02d%s", h, t.tm_min, ampm);
-        }
     }
 }
 
@@ -184,6 +174,114 @@ static void draw_pill_mini(GContext *ctx, GRect bounds, PillShape shape, GColor 
     }
 }
 
+// Subtitle columns, as x offsets into the text area, so the dots and the
+// colons of the clock times line up from row to row.
+static int16_t s_clock_dot_x, s_colon_x, s_taker_dot_x, s_dot_w, s_gap;
+
+static int text_width(const char *text, GFont font) {
+    return graphics_text_layout_get_content_size(
+        text, font, GRect(0, 0, 1000, 100), GTextOverflowModeFill, GTextAlignmentLeft).w;
+}
+
+// Beyond a day the relative text is already a day and time.
+static bool row_has_clock(time_t dose_time) {
+    int diff = (int)(dose_time - time(NULL));
+    return diff < SECONDS_PER_DAY && diff > -SECONDS_PER_DAY;
+}
+
+// Width of the hour part of a clock time, before the colon.
+static int hour_width(char *clock, GFont font) {
+    char *colon = strchr(clock, ':');
+    if (!colon) return 0;
+    *colon = '\0';
+    int w = text_width(clock, font);
+    *colon = ':';
+    return w;
+}
+
+// "In 25 min · Murray", for rows drawn without the clock column.
+static void format_subtitle(time_t dose_time, const MedEntry *med, char *buf, size_t len) {
+    char when[24];
+    time_fmt_relative(dose_time, when, sizeof(when));
+    if (s_show_taker) snprintf(buf, len, "%s \xc2\xb7 %s", when, med->taker);
+    else              snprintf(buf, len, "%s", when);
+}
+
+// Lay out "In 25 min · 10:00 AM · Murray" in columns. Show clock times only
+// if every row has room, so the rows stay alike.
+static void layout_subtitles(GFont font, int width) {
+    s_clock_checked = true;
+    s_show_clock = false;
+    int when_w = 0, hour_w = 0, rest_w = 0, taker_w = 0;
+    bool any = false;
+    char when[24], clock[12];
+    for (uint8_t i = 0; i < s_row_count; i++) {
+        MedEntry *med = med_list_get(s_rows[i].med_index);
+        time_t t = s_rows[i].dose_time;
+        if (!med || !row_has_clock(t)) continue;
+        any = true;
+        time_fmt_relative(t, when, sizeof(when));
+        when_w = MAX(when_w, text_width(when, font));
+        time_fmt_clock(t, clock, sizeof(clock));
+        int hw = hour_width(clock, font);
+        hour_w = MAX(hour_w, hw);
+        rest_w = MAX(rest_w, text_width(clock, font) - hw);
+        if (s_show_taker) taker_w = MAX(taker_w, text_width(med->taker, font));
+    }
+    if (!any) return;
+
+    s_dot_w = text_width("\xc2\xb7", font);
+    s_gap = text_width("x x", font) - text_width("xx", font);
+    s_clock_dot_x = when_w + s_gap;
+    s_colon_x = s_clock_dot_x + s_dot_w + s_gap + hour_w;
+    s_taker_dot_x = s_colon_x + rest_w + s_gap;
+    int total = s_show_taker ? s_taker_dot_x + s_dot_w + s_gap + taker_w : s_colon_x + rest_w;
+    s_show_clock = total <= width;
+}
+
+// Width the subtitle may fill. On round screens the rows next to the
+// focused one are cut by the screen edge, so fit to the row below it.
+static int subtitle_fit_w(GRect box, int cell_h) {
+#ifdef PBL_ROUND
+    int r = PBL_DISPLAY_WIDTH / 2;
+    int d = cell_h / 2 + box.origin.y + box.size.h;  // from screen center
+    int half = 0;
+    while ((half + 1) * (half + 1) <= r * r - d * d) half++;
+    return MIN(box.size.w, r + half - box.origin.x - 4);
+#else
+    return box.size.w;
+#endif
+}
+
+// Draws text at x within the subtitle box, w wide.
+static void draw_sub(GContext *ctx, const char *text, GFont font, GRect box, int x, int w) {
+    graphics_draw_text(ctx, text, font, GRect(box.origin.x + x, box.origin.y, w, box.size.h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+}
+
+static void draw_subtitle(GContext *ctx, const DoseRow *row, const MedEntry *med,
+                          GFont font, GRect box) {
+    int w = box.size.w;
+    if (!s_show_clock || !row_has_clock(row->dose_time)) {
+        char subtitle[SUBTITLE_LEN];
+        format_subtitle(row->dose_time, med, subtitle, sizeof(subtitle));
+        draw_sub(ctx, subtitle, font, box, 0, w);
+        return;
+    }
+    char when[24], clock[12];
+    time_fmt_relative(row->dose_time, when, sizeof(when));
+    time_fmt_clock(row->dose_time, clock, sizeof(clock));
+    int clock_x = s_colon_x - hour_width(clock, font);
+    draw_sub(ctx, when, font, box, 0, s_clock_dot_x);
+    draw_sub(ctx, "\xc2\xb7", font, box, s_clock_dot_x, s_dot_w + s_gap);
+    draw_sub(ctx, clock, font, box, clock_x, w - clock_x);
+    if (s_show_taker) {
+        int taker_x = s_taker_dot_x + s_dot_w + s_gap;
+        draw_sub(ctx, "\xc2\xb7", font, box, s_taker_dot_x, s_dot_w + s_gap);
+        draw_sub(ctx, med->taker, font, box, taker_x, w - taker_x);
+    }
+}
+
 static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, void *ctx_data) {
     GRect bounds = layer_get_bounds(cell_layer);
 
@@ -208,28 +306,16 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
     GRect pill_bounds = GRect(pill_x, (bounds.size.h - 20) / 2, 20, 20);
     draw_pill_mini(ctx, pill_bounds, med->shape, med->color, highlighted);
 
-    char time_str[16];
-    format_dose_time(row->dose_time, time_str, sizeof(time_str));
-
-    char title[64];
-    if (settings->privacyMode) {
-        snprintf(title, sizeof(title), "%s  Due", time_str);
-    } else {
-        snprintf(title, sizeof(title), "%s  %s", time_str, med->name);
-    }
-
-    char subtitle[64];
-    if (!settings->privacyMode && med->dose[0] != '\0') {
-        snprintf(subtitle, sizeof(subtitle), "%s \xc2\xb7 %s", med->taker, med->dose);
-    } else {
-        snprintf(subtitle, sizeof(subtitle), "%s", med->taker);
-    }
+    // Title: what. Subtitle: when, and for whom if more than one person.
+    const char *title = settings->privacyMode ? "Medication" : med->name;
+    GFont sub_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+    GRect sub_box = GRect(text_x, 22, text_w, 16);
+    if (!s_clock_checked) layout_subtitles(sub_font, subtitle_fit_w(sub_box, bounds.size.h));
 
     graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
     graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                       GRect(text_x, 2, text_w, 20), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
-    graphics_draw_text(ctx, subtitle, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(text_x, 22, text_w, 16), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+                       GRect(text_x, 2, text_w, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    draw_subtitle(ctx, row, med, sub_font, sub_box);
 }
 
 static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
@@ -319,4 +405,18 @@ void dose_list_window_refresh(void) {
 
 void dose_list_window_refresh_after(uint8_t med_index, time_t dose_time) {
     apply_refresh(med_index, dose_time);
+}
+
+// Called every minute: keep "In 25 min" current and drop doses that have passed.
+void dose_list_window_tick(void) {
+    if (!s_menu_layer) return;
+    time_t now = time(NULL);
+    for (uint8_t i = 0; i < s_row_count; i++) {
+        if (s_rows[i].dose_time < now - 60) {
+            dose_list_window_refresh();
+            return;
+        }
+    }
+    s_clock_checked = false;  // relative times change length
+    layer_mark_dirty(menu_layer_get_layer(s_menu_layer));
 }

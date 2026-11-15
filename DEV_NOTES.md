@@ -43,6 +43,17 @@ Three pairs of C and JS functions must be kept in sync:
 
 The JS mirrors are testable without a Pebble emulator.
 
+### Relative Times and the Minute Tick
+
+`time_fmt.c` formats due times in PebbleOS wording ("Now", "In 25 min",
+"5 min ago"), switching to a day and clock time beyond 24 hours.
+
+`main.c` owns the app's only `tick_timer_service` subscription (an app gets one
+tick handler) and calls `dose_list_window_tick()` and `detail_window_tick()`
+every minute. New screens that show relative times should add a call there
+rather than subscribing themselves. The list rebuilds its rows once a dose is
+more than a minute past due.
+
 ### Build Targets (7 platforms)
 
 `gabbro` (Round 2 260×260), `chalk` (Time Round 180×180), `emery` (Time 2 200×228), `basalt` (Time 144×168), `aplite` (Classic 144×168), `diorite` (Pebble 2 144×168), `flint` (Pebble 2 Duo 144×168).
