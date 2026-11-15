@@ -1,5 +1,6 @@
 #include "dose_list_window.h"
-#include "detail_window.h"
+#include "dose_action.h"
+#include "confirm_dialog.h"
 #include "med_list.h"
 #include "appmessage.h"
 #include <pebble.h>
@@ -232,9 +233,42 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
                        GRect(text_x, 22, text_w, 16), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
+// ---------------------------------------------------------------------------
+// Row actions: Select opens an action menu, as on a system alarm
+// ---------------------------------------------------------------------------
+
+static DoseRow s_menu_row;
+
+static void row_action_performed(ActionMenu *menu, const ActionMenuItem *item, void *ctx) {
+    // Handled in row_menu_did_close, once the menu has closed.
+}
+
+static void row_menu_did_close(ActionMenu *menu, const ActionMenuItem *performed, void *ctx) {
+    action_menu_hierarchy_destroy(action_menu_get_root_level(menu), NULL, NULL);
+    if (!performed) return;
+    DoseAction action = (DoseAction)(uintptr_t)action_menu_item_get_action_data(performed);
+    dose_action_mark(s_menu_row.med_index, s_menu_row.dose_time, action);
+    dose_list_window_refresh_after(s_menu_row.med_index, s_menu_row.dose_time);
+    confirm_dialog_push(action == DOSE_TAKEN ? "Taken" : "Skipped");
+}
+
 static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
     if (s_row_count == 0) return;
-    detail_window_push(s_rows[index->row].med_index, s_rows[index->row].dose_time, DETAIL_MODE_BROWSE);
+    s_menu_row = s_rows[index->row];
+
+    ActionMenuLevel *root = action_menu_level_create(2);
+    action_menu_level_add_action(root, "Taken", row_action_performed, (void *)(uintptr_t)DOSE_TAKEN);
+    action_menu_level_add_action(root, "Skip", row_action_performed, (void *)(uintptr_t)DOSE_SKIPPED);
+    ActionMenuConfig config = {
+        .root_level = root,
+        .colors = {
+            .background = PBL_IF_COLOR_ELSE(GColorCobaltBlue, GColorBlack),
+            .foreground = GColorWhite,
+        },
+        .align     = ActionMenuAlignCenter,
+        .did_close = row_menu_did_close,
+    };
+    action_menu_open(&config);
 }
 
 // ---------------------------------------------------------------------------

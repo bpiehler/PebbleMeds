@@ -122,9 +122,16 @@ void notifications_schedule_wakeups(void) {
 // Public: snooze — persist the desired wakeup time then reschedule
 // ---------------------------------------------------------------------------
 
+uint16_t notifications_default_snooze_mins(void) {
+    AppSettings *settings = med_list_get_settings();
+    return (settings->snoozeMins > 0) ? settings->snoozeMins : 15;
+}
+
 void notifications_schedule_snooze(uint8_t med_index, time_t dose_time) {
-    AppSettings *settings  = med_list_get_settings();
-    uint16_t snooze_mins   = (settings->snoozeMins > 0) ? settings->snoozeMins : 15;
+    notifications_schedule_snooze_for(med_index, dose_time, notifications_default_snooze_mins());
+}
+
+void notifications_schedule_snooze_for(uint8_t med_index, time_t dose_time, uint16_t snooze_mins) {
     time_t   snooze_t      = time(NULL) + (time_t)snooze_mins * 60;
     // Persist the wakeup time AND which dose was snoozed.  The wakeup handler
     // uses med_index + dose_time directly rather than re-searching by window,
@@ -164,7 +171,7 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
         MedEntry *snooze_med = med_list_get(med_index);
         fire_vibe(snooze_med ? snooze_med->vibePattern : MED_VIBE_SHORT);
         if (snooze_med) {
-            detail_window_push(med_index, dose_ts, DETAIL_MODE_ALERT);
+            detail_window_push(med_index, dose_ts);
         } else {
             dose_list_window_push();  // fallback: med was removed since snooze set
         }
@@ -198,7 +205,7 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
 
     light_enable_interaction();
     fire_vibe(med_list_get(due_indices[0]) ? med_list_get(due_indices[0])->vibePattern : MED_VIBE_SHORT);
-    detail_window_push(due_indices[0], due_times[0], DETAIL_MODE_ALERT);
+    detail_window_push(due_indices[0], due_times[0]);
     notifications_schedule_wakeups();
 }
 
