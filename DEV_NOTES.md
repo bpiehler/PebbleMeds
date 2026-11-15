@@ -103,6 +103,32 @@ The LSP can't resolve `pebble.h` or Pebble SDK types. These are NOT real errors 
 
 `PropertyAnimation` objects must be destroyed via `property_animation_destroy()`, NOT `animation_destroy()`. The stopped handler must clear `s_prop_anim` BEFORE calling `animation_unschedule()` to prevent double-free in re-entrant stopped handler calls.
 
+### Reminder Screen (modeled on the system alarm)
+
+The detail window follows the PebbleOS alarm popup (`alarm_popup.c`):
+
+- Up = Snooze, Select = Taken, Down = Skip, with the system action bar icons.
+  Back also snoozes.
+- The dose list follows the Alarms app list: Select on a row opens an
+  `ActionMenu` (Taken, Skip) instead of the reminder screen. Both paths mark
+  doses through `dose_action_mark()`.
+- The row menu adds "Undo Taken 8:00 AM" (or "Undo Skipped") for the med's
+  latest mark from the last 24 hours. `dose_action_clear()` removes the log
+  entry and sends `undo` to the phone, which drops it from its log and, for an
+  interval med, sets `lastTakenTs` back to the previous Taken dose and resends
+  the config. Aplite has no undo, to save memory.
+- The backlight is left to the system (the wakeup handler already lights it
+  briefly), so an unanswered reminder costs no extra battery. The reminder
+  stays up until answered; if it closes some other way, `window_unload`
+  records an implicit snooze, as before.
+- Each action pushes `confirm_dialog` and then removes the detail window, so a
+  wakeup-launched app exits when the dialog times out (2 s, as the alarm's do).
+
+Assets copied from PebbleOS (Apache 2.0, listed in `NOTICE`): `action_bar_icon_check/x/snooze.png`
+and `Pebble_80x80_Generic_confirmation.pdc` (a draw command sequence, loaded as
+a `raw` resource). Aplite has no draw command support, so the resource is not
+built for it and the dialog shows text only.
+
 ### CloudPebble Compatibility
 
 The app uses `sdkVersion: "3"` in `appinfo.json` and flat `appKeys` format for compatibility with both CloudPebble and modern Rebble SDK. Manual `#define KEY_*` constants in `appmessage.c` prevent drift.
