@@ -11,7 +11,7 @@
 
 typedef struct {
     uint8_t med_index;
-    time_t  dose_time;
+    time_t  dose_time;  // 0 for a paused med
 } DoseRow;
 
 static DoseRow  s_rows[MED_MAX];
@@ -37,15 +37,16 @@ static void build_rows(uint8_t skip_med_index, time_t skip_after) {
             base = skip_after + 1;
         }
         s_rows[s_row_count].med_index = i;
-        s_rows[s_row_count].dose_time = med_list_next_dose_time(med, base);
+        s_rows[s_row_count].dose_time = med->paused ? 0 : med_list_next_dose_time(med, base);
         s_row_count++;
     }
 
-    // Insertion sort by dose_time (at most 16 elements)
+    // Insertion sort by dose_time (at most 16 elements), paused meds last
     for (uint8_t i = 1; i < s_row_count; i++) {
         DoseRow key = s_rows[i];
         int j = (int)i - 1;
-        while (j >= 0 && s_rows[j].dose_time > key.dose_time) {
+        while (j >= 0 && key.dose_time != 0 &&
+               (s_rows[j].dose_time == 0 || s_rows[j].dose_time > key.dose_time)) {
             s_rows[j + 1] = s_rows[j];
             j--;
         }
@@ -207,10 +208,16 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
 
     // Pill icon area
     GRect pill_bounds = GRect(pill_x, (bounds.size.h - 20) / 2, 20, 20);
-    draw_pill_mini(ctx, pill_bounds, med->shape, med->color, highlighted);
+    bool paused = (row->dose_time == 0);
+    draw_pill_mini(ctx, pill_bounds, med->shape,
+                   paused ? PBL_IF_COLOR_ELSE(GColorLightGray, med->color) : med->color, highlighted);
 
     char time_str[16];
-    format_dose_time(row->dose_time, time_str, sizeof(time_str));
+    if (paused) {
+        snprintf(time_str, sizeof(time_str), "Paused");
+    } else {
+        format_dose_time(row->dose_time, time_str, sizeof(time_str));
+    }
 
     char title[64];
     if (settings->privacyMode) {
@@ -226,7 +233,11 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
         snprintf(subtitle, sizeof(subtitle), "%s", med->taker);
     }
 
-    graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
+    // A paused med is grayed out, as a disabled alarm is.
+    GColor text_color = highlighted ? GColorWhite
+                      : paused      ? PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
+                      : GColorBlack;
+    graphics_context_set_text_color(ctx, text_color);
     graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                        GRect(text_x, 2, text_w, 20), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
     graphics_draw_text(ctx, subtitle, fonts_get_system_font(FONT_KEY_GOTHIC_14),
@@ -239,6 +250,10 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
 
 static DoseRow s_menu_row;
 
+// Action data for the pause items, after the DoseAction values.
+#define ROW_PAUSE  4
+#define ROW_RESUME 5
+
 static void row_action_performed(ActionMenu *menu, const ActionMenuItem *item, void *ctx) {
     // Handled in row_menu_did_close, once the menu has closed.
 }
@@ -246,7 +261,14 @@ static void row_action_performed(ActionMenu *menu, const ActionMenuItem *item, v
 static void row_menu_did_close(ActionMenu *menu, const ActionMenuItem *performed, void *ctx) {
     action_menu_hierarchy_destroy(action_menu_get_root_level(menu), NULL, NULL);
     if (!performed) return;
-    DoseAction action = (DoseAction)(uintptr_t)action_menu_item_get_action_data(performed);
+    uintptr_t choice = (uintptr_t)action_menu_item_get_action_data(performed);
+    if (choice == ROW_PAUSE || choice == ROW_RESUME) {
+        dose_action_set_paused(s_menu_row.med_index, choice == ROW_PAUSE);
+        dose_list_window_refresh();
+        confirm_dialog_push(choice == ROW_PAUSE ? "Paused" : "Resumed");
+        return;
+    }
+    DoseAction action = (DoseAction)choice;
     dose_action_mark(s_menu_row.med_index, s_menu_row.dose_time, action);
     dose_list_window_refresh_after(s_menu_row.med_index, s_menu_row.dose_time);
     confirm_dialog_push(action == DOSE_TAKEN ? "Taken" : "Skipped");
@@ -256,9 +278,15 @@ static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
     if (s_row_count == 0) return;
     s_menu_row = s_rows[index->row];
 
-    ActionMenuLevel *root = action_menu_level_create(2);
-    action_menu_level_add_action(root, "Taken", row_action_performed, (void *)(uintptr_t)DOSE_TAKEN);
-    action_menu_level_add_action(root, "Skip", row_action_performed, (void *)(uintptr_t)DOSE_SKIPPED);
+    // A paused med can only be resumed, as a disabled alarm can only be enabled.
+    ActionMenuLevel *root = action_menu_level_create(3);
+    if (s_menu_row.dose_time == 0) {
+        action_menu_level_add_action(root, "Resume", row_action_performed, (void *)(uintptr_t)ROW_RESUME);
+    } else {
+        action_menu_level_add_action(root, "Taken", row_action_performed, (void *)(uintptr_t)DOSE_TAKEN);
+        action_menu_level_add_action(root, "Skip", row_action_performed, (void *)(uintptr_t)DOSE_SKIPPED);
+        action_menu_level_add_action(root, "Pause", row_action_performed, (void *)(uintptr_t)ROW_PAUSE);
+    }
     ActionMenuConfig config = {
         .root_level = root,
         .colors = {

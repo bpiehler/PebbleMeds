@@ -53,6 +53,14 @@ describe('collectDoseEvents', function () {
     }
   });
 
+  test('leaves out meds that are off', function () {
+    var off = fixedMed(12);
+    off.paused = true;
+    var events = collectDoseEvents([off, fixedMed(14)], NOW);
+    expect(events.length).toBeGreaterThan(0);
+    events.forEach(function (e) { expect(e.medIndex).toBe(1); });
+  });
+
   test('caps at MAX_OCC_PER_MED occurrences per med', function () {
     // 4h interval → ~12 occurrences in 48h; should be capped at 4
     var med = intervalMed(4, 10, 0);

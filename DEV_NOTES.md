@@ -77,6 +77,12 @@ Before the heartbeat fix, wakeup chain breaks (app crash, watch reboot) were per
 - Wakeups may be cleared on watch reboot or app reinstall
 - There is NO "background app" concept in SDK 3/4 — the Wakeup API IS the background mechanism
 
+### Paused Medications
+
+A med can be paused from the config page list, which has an on/off switch for each med like the system Alarms list, or from the watch: the dose list's action menu has Pause, and a paused med's menu has only Resume. A paused med has `"paused": true` in its JSON and `paused` in `MedEntry`. It gets no wakeups, no snooze reminder and no timeline pins. The watch list shows it last, grayed out, as "Paused".
+
+The watch sends `pause` or `resume` to the phone, which updates its saved config and the pins. Keep `collect_dose_events()`, `collectDoseEvents()` and `pushTimelinePins()` in step when this changes.
+
 ### Timeline Pin Management
 
 Pin IDs use the format `pebble-meds-{medId}-{timestamp}`. The `medId` is a stable UUID v4 assigned at medication creation (`config.html:saveMed()`) and persisted through edits. The `pushTimelinePins()` function in `timeline.js` stores a `medId → [pin IDs]` map in localStorage (`pebble_meds_timeline_pin_ids`). Before inserting new pins, it deletes all previously-tracked pins via `Pebble.deleteTimelinePin()` (available in Rebble app v1.0.6.8+). Backward-compat migration assigns `medId` to existing meds that lack one on first push.

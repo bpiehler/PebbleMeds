@@ -52,6 +52,7 @@ function pushTimelinePins(cfg) {
   var newPinIdMap = {};
 
   cfg.meds.forEach(function (med, index) {
+    if (med.paused) return;
     var doseTimes = schedule.getNextDoseTimes(med, now, horizon);
     console.log('Timeline: med ' + index + ' (' + med.name + ') [' + med.medId + '] has ' + doseTimes.length + ' doses in 48h');
     var medId = med.medId;

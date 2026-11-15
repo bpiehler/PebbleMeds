@@ -15,3 +15,11 @@ void dose_action_mark(uint8_t med_index, time_t dose_time, DoseAction action) {
     }
     notifications_schedule_wakeups();
 }
+
+void dose_action_set_paused(uint8_t med_index, bool paused) {
+    MedEntry *med = med_list_get(med_index);
+    if (!med) return;
+    med->paused = paused;
+    appmessage_send_action(med_index, paused ? "pause" : "resume", 0);
+    notifications_schedule_wakeups();
+}

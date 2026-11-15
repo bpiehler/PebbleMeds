@@ -44,6 +44,7 @@ function collectDoseEvents(meds, now) {
   var events  = [];
 
   meds.forEach(function (med, medIndex) {
+    if (med.paused) return;
     var times = schedule.getNextDoseTimes(med, now, horizon);
     var count = Math.min(times.length, MAX_OCC_PER_MED);
     for (var i = 0; i < count; i++) {
