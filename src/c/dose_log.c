@@ -30,7 +30,18 @@ void dose_log_deinit(void) {
     persist_write_data(PERSIST_KEY_DOSE_LOG, &s_store, sizeof(DoseLogStore));
 }
 
+static bool has_entry(uint8_t med_index, DoseAction action, uint32_t ts) {
+    for (uint8_t i = 0; i < s_store.count; i++) {
+        DoseLogEntry e = dose_log_get(i);
+        if (e.med_index == med_index && e.ts == ts && e.action == action) return true;
+    }
+    return false;
+}
+
 void dose_log_record(uint8_t med_index, DoseAction action, uint32_t ts) {
+    // A dose can be snoozed many times; one entry keeps room for the rest.
+    if (action == DOSE_SNOOZED && has_entry(med_index, DOSE_SNOOZED, ts)) return;
+
     s_store.entries[s_store.head] = (DoseLogEntry){
         .ts        = ts,
         .med_index = med_index,
@@ -52,4 +63,16 @@ DoseLogEntry dose_log_get(uint8_t index) {
     // index 0 = oldest, count-1 = newest
     uint8_t ring_index = (s_store.head - s_store.count + index + DOSE_LOG_MAX) % DOSE_LOG_MAX;
     return s_store.entries[ring_index];
+}
+
+bool dose_log_is_marked(uint8_t med_index, uint32_t ts) {
+    return has_entry(med_index, DOSE_TAKEN, ts) || has_entry(med_index, DOSE_SKIPPED, ts);
+}
+
+bool dose_log_covers(uint32_t ts) {
+    if (s_store.count < DOSE_LOG_MAX) return true;
+    for (uint8_t i = 0; i < s_store.count; i++) {
+        if (dose_log_get(i).ts <= ts) return true;
+    }
+    return false;
 }

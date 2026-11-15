@@ -2,6 +2,7 @@
 #include "med_list.h"
 #include "detail_window.h"
 #include "dose_list_window.h"
+#include "dose_log.h"
 #include <pebble.h>
 
 #define WAKEUP_COOKIE_DOSE      0
@@ -160,6 +161,8 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
         persist_write_int(PERSIST_KEY_SNOOZE_MED,  0xFF);
         persist_write_int(PERSIST_KEY_SNOOZE_DOSE, 0);
         notifications_schedule_wakeups();
+        // Marked from the list while snoozed: nothing to remind.
+        if (dose_log_is_marked(med_index, (uint32_t)dose_ts)) return;
         light_enable_interaction();
         MedEntry *snooze_med = med_list_get(med_index);
         fire_vibe(snooze_med ? snooze_med->vibePattern : MED_VIBE_SHORT);
@@ -173,6 +176,7 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
 
     // Regular dose wakeup: find all doses due within DUE_WINDOW_SECS of now
     uint8_t due_count = 0;
+    uint8_t marked_count = 0;
     uint8_t due_indices[MED_MAX];
     time_t  due_times[MED_MAX];
 
@@ -183,12 +187,21 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
         // next_dose_time after (now - DUE_WINDOW - 1) gives the dose in the window
         time_t next = med_list_next_dose_time(med, now - DUE_WINDOW_SECS - 1);
         if (next >= now - DUE_WINDOW_SECS && next <= now + 60) {
+            // Marked early from the list: no reminder.
+            if (dose_log_is_marked(i, (uint32_t)next)) {
+                marked_count++;
+                continue;
+            }
             due_indices[due_count] = i;
             due_times[due_count]   = next;
             due_count++;
         }
     }
 
+    if (due_count == 0 && marked_count > 0) {
+        notifications_schedule_wakeups();
+        return;
+    }
     if (due_count == 0) {
         APP_LOG(APP_LOG_LEVEL_WARNING, "Wakeup fired but no doses found in window");
         notifications_schedule_wakeups();
