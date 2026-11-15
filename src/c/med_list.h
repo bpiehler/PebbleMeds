@@ -65,3 +65,5 @@ void         med_list_set(uint8_t index, const MedEntry *entry);
 AppSettings *med_list_get_settings(void);
 void         med_list_save_settings(void);
 time_t       med_list_next_dose_time(const MedEntry *med, time_t after);
+// Latest dose in (since, now], or 0 if there is none.
+time_t       med_list_last_dose_time(const MedEntry *med, time_t since, time_t now);

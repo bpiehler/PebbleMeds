@@ -192,3 +192,15 @@ time_t med_list_next_dose_time(const MedEntry *med, time_t after) {
         return 0;
     }
 }
+
+time_t med_list_last_dose_time(const MedEntry *med, time_t since, time_t now) {
+    time_t last = 0;
+    time_t t = since;
+    for (int i = 0; i < 64; i++) {
+        time_t next = med_list_next_dose_time(med, t);
+        if (next <= t || next > now) break;
+        last = next;
+        t = next;
+    }
+    return last;
+}

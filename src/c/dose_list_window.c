@@ -2,15 +2,20 @@
 #include "detail_window.h"
 #include "med_list.h"
 #include "appmessage.h"
+#include "dose_log.h"
 #include <pebble.h>
 
 // ---------------------------------------------------------------------------
 // Dose row: one entry in the sorted list
 // ---------------------------------------------------------------------------
 
+// A dose that came due in the last day and was not marked stays as missed.
+#define MISSED_WINDOW_SECS (24 * 3600)
+
 typedef struct {
     uint8_t med_index;
     time_t  dose_time;
+    bool    missed;
 } DoseRow;
 
 static DoseRow  s_rows[MED_MAX];
@@ -35,12 +40,18 @@ static void build_rows(uint8_t skip_med_index, time_t skip_after) {
         if (skip_after > 0 && i == skip_med_index && skip_after >= now) {
             base = skip_after + 1;
         }
-        s_rows[s_row_count].med_index = i;
-        s_rows[s_row_count].dose_time = med_list_next_dose_time(med, base);
-        s_row_count++;
+        // One row per medication: a missed dose stands in for the next one.
+        time_t last = med_list_last_dose_time(med, now - MISSED_WINDOW_SECS, now);
+        bool missed = last > 0 && dose_log_covers((uint32_t)last)
+                      && !dose_log_is_marked(i, (uint32_t)last);
+        s_rows[s_row_count++] = (DoseRow){
+            .med_index = i,
+            .dose_time = missed ? last : med_list_next_dose_time(med, base),
+            .missed    = missed,
+        };
     }
 
-    // Insertion sort by dose_time (at most 16 elements)
+    // Insertion sort by dose_time, so missed doses come first
     for (uint8_t i = 1; i < s_row_count; i++) {
         DoseRow key = s_rows[i];
         int j = (int)i - 1;
@@ -62,12 +73,13 @@ static void format_dose_time(time_t ts, char *buf, size_t buflen) {
     struct tm t     = *localtime(&ts);
 
     bool is_today = (t.tm_yday == t_now.tm_yday && t.tm_year == t_now.tm_year);
+    const char *day = (ts < now) ? "Yday" : "Tmrw";
 
     if (clock_is_24h_style()) {
         if (is_today) {
             snprintf(buf, buflen, "%02d:%02d", t.tm_hour, t.tm_min);
         } else {
-            snprintf(buf, buflen, "Tmrw %02d:%02d", t.tm_hour, t.tm_min);
+            snprintf(buf, buflen, "%s %02d:%02d", day, t.tm_hour, t.tm_min);
         }
     } else {
         int h = t.tm_hour % 12;
@@ -76,7 +88,7 @@ static void format_dose_time(time_t ts, char *buf, size_t buflen) {
         if (is_today) {
             snprintf(buf, buflen, "%d:%02d%s", h, t.tm_min, ampm);
         } else {
-            snprintf(buf, buflen, "Tmrw %d:%02d%s", h, t.tm_min, ampm);
+            snprintf(buf, buflen, "%s %d:%02d%s", day, h, t.tm_min, ampm);
         }
     }
 }
@@ -219,15 +231,21 @@ static void draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, v
     }
 
     char subtitle[64];
+    const char *missed = row->missed ? "Missed \xc2\xb7 " : "";
     if (!settings->privacyMode && med->dose[0] != '\0') {
-        snprintf(subtitle, sizeof(subtitle), "%s \xc2\xb7 %s", med->taker, med->dose);
+        snprintf(subtitle, sizeof(subtitle), "%s%s \xc2\xb7 %s", missed, med->taker, med->dose);
     } else {
-        snprintf(subtitle, sizeof(subtitle), "%s", med->taker);
+        snprintf(subtitle, sizeof(subtitle), "%s%s", missed, med->taker);
     }
 
-    graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
+    GColor title_color = highlighted ? GColorWhite : GColorBlack;
+#ifdef PBL_COLOR
+    if (row->missed && !highlighted) title_color = GColorDarkCandyAppleRed;
+#endif
+    graphics_context_set_text_color(ctx, title_color);
     graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                        GRect(text_x, 2, text_w, 20), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+    graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
     graphics_draw_text(ctx, subtitle, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                        GRect(text_x, 22, text_w, 16), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
