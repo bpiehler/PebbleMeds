@@ -26,7 +26,7 @@
 |-----|------|-------|---------|
 | 0 | uint8 | med_list.c | Med count |
 | 1-16 | MedEntry | med_list.c | One per med (max 16) |
-| 17 | AppSettings | med_list.c | snoozeMins, privacyMode |
+| 17 | AppSettings | med_list.c | snoozeMins, privacyMode, earlyLimitMins |
 | 18 | int32 | notifications.c | Pending snooze timestamp (0 = none) |
 | 19 | DoseLogStore | dose_log.c | 30-entry ring buffer |
 | 20 | uint8 | notifications.c | Snoozed med index |

@@ -54,6 +54,7 @@ typedef struct {
 typedef struct {
     uint16_t snoozeMins;
     bool     privacyMode;
+    uint16_t earlyLimitMins;  // how early a dose can be marked; 0 = any time
 } AppSettings;
 
 void         med_list_init(void);

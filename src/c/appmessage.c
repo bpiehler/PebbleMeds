@@ -228,10 +228,11 @@ static void parse_med_object(const char *js, size_t len, MedEntry *med) {
 
 static void parse_settings_object(const char *js, size_t len) {
     jsmn_parser parser;
-    jsmntok_t tokens[16];
+    // Room for the settings and a knownTakers list of up to 20 names.
+    jsmntok_t tokens[32];
     jsmn_init(&parser);
 
-    int r = jsmn_parse(&parser, js, len, tokens, 16);
+    int r = jsmn_parse(&parser, js, len, tokens, 32);
     if (r < 1 || tokens[0].type != JSMN_OBJECT) return;
 
     AppSettings *s = med_list_get_settings();
@@ -246,6 +247,8 @@ static void parse_settings_object(const char *js, size_t len) {
             char buf[8];
             jsmn_str(js, val, buf, sizeof(buf));
             s->privacyMode = (strcmp(buf, "true") == 0);
+        } else if (jsmn_eq(js, key, "earlyLimitMins")) {
+            s->earlyLimitMins = (uint16_t)jsmn_toi(js, val);
         }
         j += jsmn_subtree_size(tokens, j);
     }
