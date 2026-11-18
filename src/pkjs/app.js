@@ -72,6 +72,9 @@ function logDoseAction(action, medIndex, ts) {
     if (typeof localStorage !== 'undefined') {
       var raw = localStorage.getItem(key);
       if (raw) { try { log = JSON.parse(raw); } catch (e) {} }
+      var last = log[log.length - 1];
+      // The watch sends an action again when it missed the reply.
+      if (last && last.medIndex === medIndex && last.ts === ts && last.status === action) return;
       log.push({ medIndex: medIndex, ts: ts, status: action });
       if (log.length > 500) log = log.slice(log.length - 500);
       localStorage.setItem(key, JSON.stringify(log));
