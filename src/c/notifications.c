@@ -27,6 +27,12 @@ static void fire_vibe(uint8_t vibe_pattern) {
     }
 }
 
+void notifications_alert(uint8_t med_index) {
+    MedEntry *med = med_list_get(med_index);
+    light_enable_interaction();
+    fire_vibe(med ? med->vibePattern : MED_VIBE_SHORT);
+}
+
 // ---------------------------------------------------------------------------
 // Snoozed doses: one entry per dose, each with the time it comes back
 // ---------------------------------------------------------------------------
@@ -212,33 +218,25 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
     }
 
     if (cookie == WAKEUP_COOKIE_SNOOZE) {
-        // Show the earliest snoozed dose. Others due now get the next wakeup.
+        // Show every snoozed dose that is due, one after another.
         Snooze list[MED_MAX];
         uint8_t count = snoozes_read(list);
-        uint8_t first = count;
+        uint8_t keep = 0, shown = 0;
         for (uint8_t i = 0; i < count; i++) {
-            if (list[i].until <= (uint32_t)(now + 60)
-                    && (first == count || list[i].until < list[first].until)) {
-                first = i;
+            if (list[i].until > (uint32_t)(now + 60)) {
+                list[keep++] = list[i];
+                continue;
+            }
+            if (!med_list_get(list[i].med_index)) continue;  // med removed
+            if (shown++ == 0) {
+                notifications_alert(list[i].med_index);
+                detail_window_push(list[i].med_index, (time_t)list[i].dose_ts, DETAIL_MODE_ALERT);
+            } else {
+                detail_window_queue(list[i].med_index, (time_t)list[i].dose_ts);
             }
         }
-        if (first == count) {
-            notifications_schedule_wakeups();
-            return;
-        }
-        uint8_t med_index = list[first].med_index;
-        time_t  dose_ts   = (time_t)list[first].dose_ts;
-        list[first] = list[--count];
-        snoozes_write(list, count);
+        snoozes_write(list, keep);
         notifications_schedule_wakeups();
-        light_enable_interaction();
-        MedEntry *snooze_med = med_list_get(med_index);
-        fire_vibe(snooze_med ? snooze_med->vibePattern : MED_VIBE_SHORT);
-        if (snooze_med) {
-            detail_window_push(med_index, dose_ts, DETAIL_MODE_ALERT);
-        } else {
-            dose_list_window_push();  // fallback: med was removed since snooze set
-        }
         return;
     }
 
@@ -267,9 +265,11 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
         return;
     }
 
-    light_enable_interaction();
-    fire_vibe(med_list_get(due_indices[0]) ? med_list_get(due_indices[0])->vibePattern : MED_VIBE_SHORT);
+    notifications_alert(due_indices[0]);
     detail_window_push(due_indices[0], due_times[0], DETAIL_MODE_ALERT);
+    for (uint8_t i = 1; i < due_count; i++) {
+        detail_window_queue(due_indices[i], due_times[i]);
+    }
     notifications_schedule_wakeups();
 }
 
