@@ -257,15 +257,14 @@ static void parse_settings_object(const char *js, size_t len) {
 // Searches for "key": — safe because we control the format from config.html.
 // ---------------------------------------------------------------------------
 
+// strchr, not strstr: strstr pulls in about 1 KB of library code.
 static const char *find_root_value(const char *json, const char *key) {
-    char pattern[48];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    const char *p = json;
-    while ((p = strstr(p, pattern)) != NULL) {
-        const char *after = p + strlen(pattern);
+    size_t len = strlen(key);
+    for (const char *p = json; (p = strchr(p, '"')) != NULL; p++) {
+        if (strncmp(p + 1, key, len) != 0 || p[len + 1] != '"') continue;
+        const char *after = p + len + 2;
         while (*after == ' ' || *after == '\t') after++;
         if (*after == ':') return after + 1; // points to value (may have leading space)
-        p += strlen(pattern); // false positive, keep searching
     }
     return NULL;
 }
