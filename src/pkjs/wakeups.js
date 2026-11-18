@@ -73,10 +73,12 @@ function collectDoseEvents(meds, now) {
 //     slots from 8 to 7, or from 7 to 6 when a snooze is also pending)
 //   - When a snooze is pending, reserves 1 additional slot for it
 //
-// pendingSnoozeTs: pass 0 or null when no snooze is pending.
+// pendingSnoozeTs: the earliest snoozed dose's time, or 0 or null when no
+// dose is snoozed. A time already past wakes a minute from now.
 // ---------------------------------------------------------------------------
 function planWakeups(meds, now, pendingSnoozeTs) {
-  var hasSnooze = !!(pendingSnoozeTs && pendingSnoozeTs > now);
+  var hasSnooze = !!(pendingSnoozeTs && pendingSnoozeTs > 0);
+  if (hasSnooze && pendingSnoozeTs < now + 60) pendingSnoozeTs = now + 60;
   var maxDose   = hasSnooze ? 6 : 7;  // 8 total - 1 heartbeat - (1 snooze?)
 
   if (meds.length === 0) {

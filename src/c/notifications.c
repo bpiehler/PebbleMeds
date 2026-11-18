@@ -9,9 +9,11 @@
 #define WAKEUP_COOKIE_HEARTBEAT 2
 #define DUE_WINDOW_SECS         300   // 5-minute grouping window for regular dose wakeups
 #define HEARTBEAT_INTERVAL_SECS (6 * 3600)  // safety-net recovery window
-#define PERSIST_KEY_SNOOZE      18
-#define PERSIST_KEY_SNOOZE_MED  20
-#define PERSIST_KEY_SNOOZE_DOSE 21
+// Keys 18, 20 and 21 held the single snooze of older versions.
+#define PERSIST_KEY_OLD_SNOOZE      18
+#define PERSIST_KEY_OLD_SNOOZE_MED  20
+#define PERSIST_KEY_OLD_SNOOZE_DOSE 21
+#define PERSIST_KEY_SNOOZES         22
 
 // ---------------------------------------------------------------------------
 // Vibration helper
@@ -23,6 +25,57 @@ static void fire_vibe(uint8_t vibe_pattern) {
         case MED_VIBE_DOUBLE: vibes_double_pulse(); break;
         default:          vibes_short_pulse();  break;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Snoozed doses: one entry per dose, each with the time it comes back
+// ---------------------------------------------------------------------------
+
+typedef struct __attribute__((packed)) {
+    uint32_t until;
+    uint32_t dose_ts;
+    uint8_t  med_index;
+} Snooze;
+
+static uint8_t snoozes_read(Snooze *out) {
+    int size = persist_get_size(PERSIST_KEY_SNOOZES);
+    if (size > 0) {
+        persist_read_data(PERSIST_KEY_SNOOZES, out, MED_MAX * sizeof(Snooze));
+        return (uint8_t)(size / (int)sizeof(Snooze));
+    }
+    // Snooze saved by an older version
+    int32_t until = persist_read_int(PERSIST_KEY_OLD_SNOOZE);
+    if (until <= 0) return 0;
+    out[0] = (Snooze){
+        .until     = (uint32_t)until,
+        .dose_ts   = (uint32_t)persist_read_int(PERSIST_KEY_OLD_SNOOZE_DOSE),
+        .med_index = (uint8_t)persist_read_int(PERSIST_KEY_OLD_SNOOZE_MED),
+    };
+    return 1;
+}
+
+static void snoozes_write(const Snooze *list, uint8_t count) {
+    if (count > 0) {
+        persist_write_data(PERSIST_KEY_SNOOZES, list, count * sizeof(Snooze));
+    } else {
+        persist_delete(PERSIST_KEY_SNOOZES);
+    }
+    if (persist_exists(PERSIST_KEY_OLD_SNOOZE)) {
+        persist_delete(PERSIST_KEY_OLD_SNOOZE);
+        persist_delete(PERSIST_KEY_OLD_SNOOZE_MED);
+        persist_delete(PERSIST_KEY_OLD_SNOOZE_DOSE);
+    }
+}
+
+// Earliest snooze time, or 0 if no dose is snoozed.
+static time_t snoozes_earliest(void) {
+    Snooze list[MED_MAX];
+    uint8_t count = snoozes_read(list);
+    time_t earliest = 0;
+    for (uint8_t i = 0; i < count; i++) {
+        if (earliest == 0 || (time_t)list[i].until < earliest) earliest = (time_t)list[i].until;
+    }
+    return earliest;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,8 +144,11 @@ void notifications_schedule_wakeups(void) {
     // a wakeup slot for it.  Without this, a full dose schedule would silently
     // drop the snooze when another med fires mid-snooze.
     // One additional slot is always reserved for the heartbeat safety net.
-    time_t snooze_t  = (time_t)persist_read_int(PERSIST_KEY_SNOOZE);
-    bool   has_snooze = (snooze_t > now);
+    // The snooze slot wakes for the earliest snoozed dose. A snooze time that
+    // passed while the watch was off comes back in a minute.
+    time_t snooze_t   = snoozes_earliest();
+    bool   has_snooze = (snooze_t > 0);
+    if (has_snooze && snooze_t < now + 60) snooze_t = now + 60;
     uint8_t max_dose  = has_snooze ? 6 : 7;  // 8 total - 1 heartbeat - (1 snooze?)
 
     DoseEvent events[32];
@@ -119,20 +175,27 @@ void notifications_schedule_wakeups(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Public: snooze — persist the desired wakeup time then reschedule
+// Public: snooze. Save the dose and when it comes back, then reschedule.
 // ---------------------------------------------------------------------------
 
 void notifications_schedule_snooze(uint8_t med_index, time_t dose_time) {
     AppSettings *settings  = med_list_get_settings();
     uint16_t snooze_mins   = (settings->snoozeMins > 0) ? settings->snoozeMins : 15;
-    time_t   snooze_t      = time(NULL) + (time_t)snooze_mins * 60;
-    // Persist the wakeup time AND which dose was snoozed.  The wakeup handler
-    // uses med_index + dose_time directly rather than re-searching by window,
-    // so the reminder fires correctly regardless of how far past the dose time
-    // the snooze wakeup lands.
-    persist_write_int(PERSIST_KEY_SNOOZE,      (int32_t)snooze_t);
-    persist_write_int(PERSIST_KEY_SNOOZE_MED,  (int32_t)med_index);
-    persist_write_int(PERSIST_KEY_SNOOZE_DOSE, (int32_t)dose_time);
+    Snooze list[MED_MAX];
+    uint8_t count = snoozes_read(list);
+    // A dose snoozed again, or a later dose of the same med, takes the med's entry.
+    uint8_t slot = count;
+    for (uint8_t i = 0; i < count; i++) {
+        if (list[i].med_index == med_index) { slot = i; break; }
+    }
+    if (slot == MED_MAX) slot = 0;
+    list[slot] = (Snooze){
+        .until     = (uint32_t)(time(NULL) + (time_t)snooze_mins * 60),
+        .dose_ts   = (uint32_t)dose_time,
+        .med_index = med_index,
+    };
+    if (slot == count) count++;
+    snoozes_write(list, count);
     notifications_schedule_wakeups();  // includes the snooze slot
 }
 
@@ -149,16 +212,24 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
     }
 
     if (cookie == WAKEUP_COOKIE_SNOOZE) {
-        // Read which dose was snoozed, clear all snooze state, then re-show
-        // the reminder directly.  We do NOT re-search by time window here —
-        // the snooze fires snoozeMins after the original dose, which is outside
-        // DUE_WINDOW_SECS, so a window search would always return due_count==0
-        // and fall through to dose_list_window_push() instead of the alert.
-        uint8_t med_index = (uint8_t)persist_read_int(PERSIST_KEY_SNOOZE_MED);
-        time_t  dose_ts   = (time_t)persist_read_int(PERSIST_KEY_SNOOZE_DOSE);
-        persist_write_int(PERSIST_KEY_SNOOZE,      0);
-        persist_write_int(PERSIST_KEY_SNOOZE_MED,  0xFF);
-        persist_write_int(PERSIST_KEY_SNOOZE_DOSE, 0);
+        // Show the earliest snoozed dose. Others due now get the next wakeup.
+        Snooze list[MED_MAX];
+        uint8_t count = snoozes_read(list);
+        uint8_t first = count;
+        for (uint8_t i = 0; i < count; i++) {
+            if (list[i].until <= (uint32_t)(now + 60)
+                    && (first == count || list[i].until < list[first].until)) {
+                first = i;
+            }
+        }
+        if (first == count) {
+            notifications_schedule_wakeups();
+            return;
+        }
+        uint8_t med_index = list[first].med_index;
+        time_t  dose_ts   = (time_t)list[first].dose_ts;
+        list[first] = list[--count];
+        snoozes_write(list, count);
         notifications_schedule_wakeups();
         light_enable_interaction();
         MedEntry *snooze_med = med_list_get(med_index);
