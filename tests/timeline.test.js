@@ -304,3 +304,34 @@ describe('launchCode', function () {
     expect(launchCode(1, 0, FIXED_TS)).toBeGreaterThan(3);
   });
 });
+
+describe('pushTimelinePins answered doses', function () {
+  test('uses the dose log to show answered doses', function () {
+    storedItems = {
+      pebble_meds_log: JSON.stringify([
+        { medIndex: 0, ts: FIXED_TS, status: 'skipped' },
+        { medIndex: 0, ts: FIXED_TS + 3600, status: 'snooze' },
+      ]),
+    };
+    schedule.getNextDoseTimes.mockReturnValue([FIXED_TS, FIXED_TS + 3600]);
+    Pebble.insertTimelinePin.mockClear();
+    pushTimelinePins({ meds: [{ medId: MED_A_ID, name: 'A', taker: 'Self' }], settings: {} });
+    var pins = Pebble.insertTimelinePin.mock.calls.map(function (c) { return JSON.parse(c[0]); });
+    expect(pins[0].layout.subtitle).toBe('Skipped');
+    expect(pins[1].layout.subtitle).toBeUndefined();
+  });
+});
+
+describe('buildPin answered', function () {
+  var med = { medId: MED_A_ID, name: 'A', taker: 'Self' };
+
+  test('a taken dose shows Taken and keeps its action', function () {
+    var pin = buildPin(med, FIXED_TS, false, 0, 'taken');
+    expect(pin.layout.subtitle).toBe('Taken');
+    expect(pin.actions).toHaveLength(1);
+  });
+
+  test('a skipped dose shows Skipped', function () {
+    expect(buildPin(med, FIXED_TS, false, 0, 'skipped').layout.subtitle).toBe('Skipped');
+  });
+});

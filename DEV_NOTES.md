@@ -95,7 +95,8 @@ in minutes since 2023-01-01 UTC (bits 6-31), so it stays below 2^31 until
 about 2086. `launchCode()` in `timeline.js` and
 `notifications_handle_timeline_action()` must agree. The watch opens the dose
 list with that dose's action menu open. Codes below 64 come from older pins
-and open the dose list.
+and open the dose list. After Taken or Skipped, the phone pushes the pins
+again, and the answered dose's pin shows the answer.
 
 ### Timeline Pin Cleanup API
 

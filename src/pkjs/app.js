@@ -202,21 +202,23 @@ Pebble.addEventListener('appmessage', function (e) {
       var doseTs   = msg[KEY_DOSE_TS] || Math.floor(Date.now() / 1000);
 
       logDoseAction(action, medIndex, doseTs);
+      if (action !== 'taken' && action !== 'skipped') return;
 
-      if (action === 'taken') {
-        var cfg = loadConfig();
-        if (cfg && cfg.meds[medIndex] && cfg.meds[medIndex].scheduleType === 'interval') {
-          cfg.meds[medIndex].lastTakenTs = doseTs;
-          saveConfig(cfg);
-          sendConfigToWatch(cfg);
-          try {
-            var timeline = require('./timeline');
-            if (timeline && timeline.pushTimelinePins) {
-              timeline.pushTimelinePins(cfg);
-            }
-          } catch (e) {}
-        }
+      var cfg = loadConfig();
+      if (!cfg) return;
+      var med = cfg.meds[medIndex];
+      if (action === 'taken' && med && med.scheduleType === 'interval') {
+        med.lastTakenTs = doseTs;
+        saveConfig(cfg);
+        sendConfigToWatch(cfg);
       }
+      // Pushed again so the answered dose's pin shows the answer.
+      try {
+        var timeline = require('./timeline');
+        if (timeline && timeline.pushTimelinePins) {
+          timeline.pushTimelinePins(cfg);
+        }
+      } catch (e) {}
     }
   } catch (e) {
     console.log('AppMessage handler failed: ' + e.message);
