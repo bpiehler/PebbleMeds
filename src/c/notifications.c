@@ -213,8 +213,18 @@ void notifications_handle_wakeup(WakeupId id, int32_t cookie) {
 // Public: Timeline pin action launch handler
 // ---------------------------------------------------------------------------
 
+// Launch code bits, packed by launchCode() in timeline.js:
+// 0-1 action (unused), 2-5 med index, 6-31 dose minutes since LAUNCH_EPOCH.
+#define LAUNCH_EPOCH  1672531200  // 2023-01-01 UTC
+
 void notifications_handle_timeline_action(uint32_t launch_code) {
-    // launch_code 1 = Taken, 2 = Snooze (from Timeline pin actions, Phase 4)
-    APP_LOG(APP_LOG_LEVEL_INFO, "Timeline action: %lu", (unsigned long)launch_code);
-    dose_list_window_push();
+    uint8_t med_index = (launch_code >> 2) & 0xF;
+    time_t  dose_ts   = LAUNCH_EPOCH + (time_t)(launch_code >> 6) * 60;
+
+    // Pins from older versions carry only the action.
+    if (launch_code < 64 || !med_list_get(med_index)) {
+        dose_list_window_push();
+        return;
+    }
+    dose_list_window_push_menu(med_index, dose_ts);
 }

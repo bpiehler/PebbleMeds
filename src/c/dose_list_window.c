@@ -252,10 +252,7 @@ static void row_menu_did_close(ActionMenu *menu, const ActionMenuItem *performed
     confirm_dialog_push(action == DOSE_TAKEN ? "Taken" : "Skipped");
 }
 
-static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
-    if (s_row_count == 0) return;
-    s_menu_row = s_rows[index->row];
-
+static void open_row_menu(void) {
     ActionMenuLevel *root = action_menu_level_create(2);
     action_menu_level_add_action(root, "Taken", row_action_performed, (void *)(uintptr_t)DOSE_TAKEN);
     action_menu_level_add_action(root, "Skip", row_action_performed, (void *)(uintptr_t)DOSE_SKIPPED);
@@ -269,6 +266,12 @@ static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
         .did_close = row_menu_did_close,
     };
     action_menu_open(&config);
+}
+
+static void select_click(MenuLayer *layer, MenuIndex *index, void *ctx) {
+    if (s_row_count == 0) return;
+    s_menu_row = s_rows[index->row];
+    open_row_menu();
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +336,17 @@ void dose_list_window_push(void) {
         });
     }
     window_stack_push(s_window, true);
+}
+
+void dose_list_window_push_menu(uint8_t med_index, time_t dose_time) {
+    dose_list_window_push();
+    for (uint8_t i = 0; i < s_row_count; i++) {
+        if (s_rows[i].med_index != med_index) continue;
+        menu_layer_set_selected_index(s_menu_layer, (MenuIndex){0, i}, MenuRowAlignCenter, false);
+        break;
+    }
+    s_menu_row = (DoseRow){ .med_index = med_index, .dose_time = dose_time };
+    open_row_menu();
 }
 
 static void apply_refresh(uint8_t skip_med_index, time_t skip_after) {

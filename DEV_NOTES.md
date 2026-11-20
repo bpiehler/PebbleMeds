@@ -87,6 +87,16 @@ First-time upgrade: old index-based pins (`pebble-meds-{index}-{ts}`) from befor
 
 JSON config is ~3KB; max AppMessage inbox size is 768 bytes. Config is split into chunks of ~200 bytes each, reassembled on watch. Buffer is 3300 bytes.
 
+### Timeline Pin Actions
+
+Each pin has one "Open in Pebble Meds" action of type `openWatchApp`. The launch code packs
+the action (bits 0-1, always 1), the med index (bits 2-5) and the dose time
+in minutes since 2023-01-01 UTC (bits 6-31), so it stays below 2^31 until
+about 2086. `launchCode()` in `timeline.js` and
+`notifications_handle_timeline_action()` must agree. The watch opens the dose
+list with that dose's action menu open. Codes below 64 come from older pins
+and open the dose list.
+
 ### Timeline Pin Cleanup API
 
 The Rebble app (v1.0.6.8+) exposes `Pebble.deleteTimelinePin(id)` in addition to `insertTimelinePin`. This is a local API — remote timeline pins (`getAccountToken`/`getWatchToken`) are not supported. The `deleteTimelinePin` call is synchronous/fire-and-forget (no success/failure callbacks).

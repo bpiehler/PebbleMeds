@@ -56,7 +56,7 @@ function pushTimelinePins(cfg) {
     console.log('Timeline: med ' + index + ' (' + med.name + ') [' + med.medId + '] has ' + doseTimes.length + ' doses in 48h');
     var medId = med.medId;
     doseTimes.forEach(function (ts) {
-      var pin = buildPin(med, ts, privacyMode);
+      var pin = buildPin(med, ts, privacyMode, index);
       pins.push(pin);
       if (!newPinIdMap[medId]) newPinIdMap[medId] = [];
       newPinIdMap[medId].push(pin.id);
@@ -72,7 +72,18 @@ function pushTimelinePins(cfg) {
   storePinIdMap(newPinIdMap);
 }
 
-function buildPin(med, ts, privacyMode) {
+// Launch codes carry the action, med index and dose minute so the watch can act
+// on that exact dose. Must match notifications_handle_timeline_action().
+var LAUNCH_EPOCH  = 1672531200;  // 2023-01-01 UTC; minutes from here fit in 26 bits
+var LAUNCH_OPEN   = 1;
+
+function launchCode(action, medIndex, ts) {
+  var minutes = Math.floor((ts - LAUNCH_EPOCH) / 60);
+  return minutes * 64 + (medIndex & 0xF) * 4 + action;
+}
+
+function buildPin(med, ts, privacyMode, medIndex) {
+  medIndex = medIndex || 0;
   var medId = med.medId || uuidv4();
   var title = privacyMode ? 'Medication Due' : med.name;
   var body  = privacyMode
@@ -88,8 +99,7 @@ function buildPin(med, ts, privacyMode) {
       tinyIcon: 'system://images/NOTIFICATION_REMINDER',
     },
     actions: [
-      { title: 'Taken',  type: 'openWatchApp', launchCode: 1 },
-      { title: 'Snooze', type: 'openWatchApp', launchCode: 2 },
+      { title: 'Open in Pebble Meds', type: 'openWatchApp', launchCode: launchCode(LAUNCH_OPEN, medIndex, ts) },
     ],
   };
 }
@@ -156,4 +166,5 @@ function storePinIdMap(pinIdMap) {
 module.exports = {
   pushTimelinePins: pushTimelinePins,
   buildPin:         buildPin,
+  launchCode:       launchCode,
 };

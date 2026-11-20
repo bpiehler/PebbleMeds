@@ -94,16 +94,14 @@ describe('buildPin', function () {
     expect(buildPin(med, FIXED_TS, false).layout.type).toBe('genericPin');
   });
 
-  test('has Taken and Snooze actions with correct launchCodes', function () {
+  test('has one Open in Pebble Meds action that names the dose', function () {
     var med = { medId: MED_A_ID, name: 'A', taker: 'Self' };
-    var actions = buildPin(med, FIXED_TS, false).actions;
-    expect(actions).toHaveLength(2);
-    var taken  = actions.find(function (a) { return a.title === 'Taken'; });
-    var snooze = actions.find(function (a) { return a.title === 'Snooze'; });
-    expect(taken.launchCode).toBe(1);
-    expect(snooze.launchCode).toBe(2);
-    expect(taken.type).toBe('openWatchApp');
-    expect(snooze.type).toBe('openWatchApp');
+    var actions = buildPin(med, FIXED_TS, false, 3).actions;
+    expect(actions).toHaveLength(1);
+    var minutes = Math.floor((FIXED_TS - 1672531200) / 60);
+    expect(actions[0].title).toBe('Open in Pebble Meds');
+    expect(actions[0].type).toBe('openWatchApp');
+    expect(actions[0].launchCode).toBe(minutes * 64 + 3 * 4 + 1);
   });
 
 });
@@ -280,4 +278,29 @@ describe('pushTimelinePins', function () {
     expect(function () { pushTimelinePins(cfg); }).not.toThrow();
   });
 
+});
+
+// ---------------------------------------------------------------------------
+// launchCode: action, med index and dose minute packed for the watch
+// ---------------------------------------------------------------------------
+
+describe('launchCode', function () {
+  var launchCode = timeline.launchCode;
+
+  test('packs the fields so the watch can unpack them', function () {
+    var ts = 1794700800;  // 2026-11-15 00:00 UTC
+    var code = launchCode(2, 15, ts);
+    expect(code & 3).toBe(2);
+    expect((code >>> 2) & 0xF).toBe(15);
+    expect(1672531200 + (code >>> 6) * 60).toBe(ts);
+  });
+
+  test('stays below 2^31 for decades', function () {
+    var ts = Date.UTC(2080, 0, 1) / 1000;
+    expect(launchCode(2, 15, ts)).toBeLessThan(Math.pow(2, 31));
+  });
+
+  test('is never confused with the old fixed codes 1 and 2', function () {
+    expect(launchCode(1, 0, FIXED_TS)).toBeGreaterThan(3);
+  });
 });
