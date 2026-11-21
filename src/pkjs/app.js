@@ -42,6 +42,20 @@ try {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+// Returns the payload with numeric keys. Some phone apps give the key
+// names from package.json ("Action"), others the numbers.
+function numberKeys(payload) {
+  var numbers = {
+    ConfigJson: KEY_CONFIG_JSON, ChunkIndex: KEY_CHUNK_INDEX, ChunkTotal: KEY_CHUNK_TOTAL,
+    Action: KEY_ACTION, MedIndex: KEY_MED_INDEX, DoseTs: KEY_DOSE_TS, RequestSync: KEY_REQUEST_SYNC,
+  };
+  var msg = {};
+  Object.keys(payload || {}).forEach(function (key) {
+    msg[numbers.hasOwnProperty(key) ? numbers[key] : key] = payload[key];
+  });
+  return msg;
+}
+
 function saveConfig(cfg) {
   try {
     if (typeof localStorage !== 'undefined' && localStorage.setItem) {
@@ -187,9 +201,9 @@ Pebble.addEventListener('webviewclosed', function (e) {
 });
 
 Pebble.addEventListener('appmessage', function (e) {
-  console.log('appmessage event');
+  console.log('appmessage event: ' + Object.keys(e.payload || {}).join(','));
   try {
-    var msg = e.payload;
+    var msg = numberKeys(e.payload);
     if (msg.hasOwnProperty(KEY_REQUEST_SYNC)) {
       var cfg = loadConfig();
       if (cfg) sendConfigToWatch(cfg);
