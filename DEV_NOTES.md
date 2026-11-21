@@ -19,6 +19,12 @@
 
 - `max_dose = has_snooze ? 6 : 7`
 - Heartbeat at `now + 6 * 3600` seconds; fires silently (no vibrate, just reschedules)
+- Each med can have one snoozed dose (key 22), so several doses can be
+  snoozed at once. The snooze slot wakes for the earliest one. A snooze
+  whose time passed while the watch was off comes back in a minute.
+- A wakeup shows every dose due then, one after another in the same
+  reminder window (`detail_window_queue()`). Closing the reminder without an
+  answer snoozes the doses still waiting too.
 
 ### Persist Key Layout
 
@@ -27,10 +33,11 @@
 | 0 | uint8 | med_list.c | Med count |
 | 1-16 | MedEntry | med_list.c | One per med (max 16) |
 | 17 | AppSettings | med_list.c | snoozeMins, privacyMode |
-| 18 | int32 | notifications.c | Pending snooze timestamp (0 = none) |
+| 18 | int32 | notifications.c | Older versions: snooze timestamp. Read once, then deleted |
 | 19 | DoseLogStore | dose_log.c | 30-entry ring buffer |
-| 20 | uint8 | notifications.c | Snoozed med index |
-| 21 | int32 | notifications.c | Snoozed dose timestamp |
+| 20 | uint8 | notifications.c | Older versions: snoozed med index. Deleted with 18 |
+| 21 | int32 | notifications.c | Older versions: snoozed dose timestamp. Deleted with 18 |
+| 22 | Snooze[] | notifications.c | Snoozed doses: return time, dose time and med index, one per med |
 
 No key conflicts exist.
 

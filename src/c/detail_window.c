@@ -91,6 +91,11 @@ static bool               s_action_taken;
 static bool               s_entry_done;     // prevents entry anim replaying
 static GRect              s_canvas_target_frame;
 
+// Doses due at the same time wait here and follow the current reminder.
+static uint8_t            s_next_med[MED_MAX];
+static time_t             s_next_dose[MED_MAX];
+static uint8_t            s_next_count;
+
 // Forward declarations — avoids circular include with dose_list_window.h
 void dose_list_window_refresh(void);
 void dose_list_window_refresh_after(uint8_t med_index, time_t dose_time);
@@ -239,6 +244,8 @@ static void cancel_wobble(void) {
     }
 }
 
+static bool show_next_dose(void);
+
 // Entry animation: pill drops in from above screen.
 static void entry_anim_stopped(Animation *anim, bool finished, void *ctx) {
     if (!s_prop_anim) return;
@@ -258,6 +265,7 @@ static void taken_anim_stopped(Animation *anim, bool finished, void *ctx) {
     if (s_mode == DETAIL_MODE_BROWSE) {
         dose_list_window_refresh_after(s_med_index, s_dose_time);
     }
+    if (show_next_dose()) return;
     window_stack_pop(false);
 }
 
@@ -271,6 +279,7 @@ static void skip_anim_stopped(Animation *anim, bool finished, void *ctx) {
     if (s_mode == DETAIL_MODE_BROWSE) {
         dose_list_window_refresh_after(s_med_index, s_dose_time);
     }
+    if (show_next_dose()) return;
     window_stack_pop(false);
 }
 
@@ -280,6 +289,7 @@ static void wobble_step_cb(void *ctx) {
     if (s_wobble_step >= WOBBLE_STEPS) {
         layer_set_frame(s_canvas_layer, s_canvas_target_frame);
         notifications_schedule_snooze(s_med_index, s_dose_time);
+        if (show_next_dose()) return;
         window_stack_pop(true);
         return;
     }
@@ -493,10 +503,7 @@ static void window_load(Window *window) {
     update_text();
 }
 
-static void window_appear(Window *window) {
-    if (s_entry_done) return;   // only play once per push
-    s_entry_done = true;
-
+static void play_entry_anim(void) {
     // Entry animation: pill drops in from above with an ease-out bounce feel.
     GRect from_frame    = s_canvas_target_frame;
     from_frame.origin.y = -(PILL_CANVAS_SIZE);
@@ -509,6 +516,29 @@ static void window_appear(Window *window) {
     animation_schedule(base);
 }
 
+static void window_appear(Window *window) {
+    if (s_entry_done) return;   // only play once per push
+    s_entry_done = true;
+    play_entry_anim();
+}
+
+// Shows the next waiting dose in this window. False when none is left.
+static bool show_next_dose(void) {
+    if (s_mode != DETAIL_MODE_ALERT || s_next_count == 0) return false;
+    s_med_index = s_next_med[0];
+    s_dose_time = s_next_dose[0];
+    s_next_count--;
+    memmove(s_next_med,  s_next_med + 1,  s_next_count * sizeof(s_next_med[0]));
+    memmove(s_next_dose, s_next_dose + 1, s_next_count * sizeof(s_next_dose[0]));
+    s_revealed     = false;
+    s_action_taken = false;
+    update_text();
+    layer_mark_dirty(s_canvas_layer);
+    play_entry_anim();
+    notifications_alert(s_med_index);
+    return true;
+}
+
 static void window_unload(Window *window) {
     cancel_wobble();
     cancel_current_anim();
@@ -519,6 +549,12 @@ static void window_unload(Window *window) {
         dose_log_record(s_med_index, DOSE_SNOOZED, (uint32_t)s_dose_time);
         notifications_schedule_snooze(s_med_index, s_dose_time);
     }
+    // Doses still waiting are snoozed too.
+    for (uint8_t i = 0; i < s_next_count; i++) {
+        dose_log_record(s_next_med[i], DOSE_SNOOZED, (uint32_t)s_next_dose[i]);
+        notifications_schedule_snooze(s_next_med[i], s_next_dose[i]);
+    }
+    s_next_count = 0;
 
 #ifdef PBL_RECT
     if (s_icon_taken)  { gbitmap_destroy(s_icon_taken);  s_icon_taken  = NULL; }
@@ -557,6 +593,7 @@ void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mo
     s_prop_anim    = NULL;
     s_wobble_timer = NULL;
     s_wobble_step  = 0;
+    s_next_count   = 0;
 
     s_window = window_create();
     window_set_window_handlers(s_window, (WindowHandlers){
@@ -565,4 +602,11 @@ void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mo
         .unload = window_unload,
     });
     window_stack_push(s_window, true);
+}
+
+void detail_window_queue(uint8_t med_index, time_t dose_time) {
+    if (s_next_count >= MED_MAX) return;
+    s_next_med[s_next_count]  = med_index;
+    s_next_dose[s_next_count] = dose_time;
+    s_next_count++;
 }

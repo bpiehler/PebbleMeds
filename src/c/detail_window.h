@@ -7,3 +7,5 @@ typedef enum {
 } DetailWindowMode;
 
 void detail_window_push(uint8_t med_index, time_t dose_time, DetailWindowMode mode);
+// Adds a dose to show after the current reminder. Call after detail_window_push().
+void detail_window_queue(uint8_t med_index, time_t dose_time);
