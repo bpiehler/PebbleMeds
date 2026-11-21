@@ -87,6 +87,17 @@ First-time upgrade: old index-based pins (`pebble-meds-{index}-{ts}`) from befor
 
 JSON config is ~3KB; max AppMessage inbox size is 768 bytes. Config is split into chunks of ~200 bytes each, reassembled on watch. Buffer is 3300 bytes.
 
+### Timeline Pin Actions
+
+Each pin has one "Open in Pebble Meds" action of type `openWatchApp`. The launch code packs
+the action (bits 0-1, always 1), the med index (bits 2-5) and the dose time
+in minutes since 2023-01-01 UTC (bits 6-31), so it stays below 2^31 until
+about 2086. `launchCode()` in `timeline.js` and
+`notifications_handle_timeline_action()` must agree. The watch opens the dose
+list with that dose's action menu open. Codes below 64 come from older pins
+and open the dose list. After Taken or Skipped, the phone pushes the pins
+again, and the answered dose's pin shows the answer.
+
 ### Timeline Pin Cleanup API
 
 The Rebble app (v1.0.6.8+) exposes `Pebble.deleteTimelinePin(id)` in addition to `insertTimelinePin`. This is a local API — remote timeline pins (`getAccountToken`/`getWatchToken`) are not supported. The `deleteTimelinePin` call is synchronous/fire-and-forget (no success/failure callbacks).
@@ -102,6 +113,27 @@ The LSP can't resolve `pebble.h` or Pebble SDK types. These are NOT real errors 
 ### Animation Lifecycle
 
 `PropertyAnimation` objects must be destroyed via `property_animation_destroy()`, NOT `animation_destroy()`. The stopped handler must clear `s_prop_anim` BEFORE calling `animation_unschedule()` to prevent double-free in re-entrant stopped handler calls.
+
+### Reminder Screen (modeled on the system alarm)
+
+The detail window follows the PebbleOS alarm popup (`alarm_popup.c`):
+
+- Up = Snooze, Select = Taken, Down = Skip, with the system action bar icons.
+  Back also snoozes.
+- The dose list follows the Alarms app list: Select on a row opens an
+  `ActionMenu` (Taken, Skip) instead of the reminder screen. Both paths mark
+  doses through `dose_action_mark()`.
+- The backlight is left to the system (the wakeup handler already lights it
+  briefly), so an unanswered reminder costs no extra battery. The reminder
+  stays up until answered; if it closes some other way, `window_unload`
+  records an implicit snooze, as before.
+- Each action pushes `confirm_dialog` and then removes the detail window, so a
+  wakeup-launched app exits when the dialog times out (2 s, as the alarm's do).
+
+Assets copied from PebbleOS (Apache 2.0, listed in `NOTICE`): `action_bar_icon_check/x/snooze.png`
+and `Pebble_80x80_Generic_confirmation.pdc` (a draw command sequence, loaded as
+a `raw` resource). Aplite has no draw command support, so the resource is not
+built for it and the dialog shows text only.
 
 ### CloudPebble Compatibility
 

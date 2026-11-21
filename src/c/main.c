@@ -16,8 +16,7 @@ static void handle_wakeup_launch(WakeupId id, int32_t cookie) {
 }
 
 static void handle_timeline_launch(uint32_t launch_code) {
-  // Called when app is launched by a Timeline pin action.
-  // launch_code 1 = Taken, 2 = Snooze
+  // Called when app is launched by a Timeline pin action: open the dose's action menu.
   notifications_handle_timeline_action(launch_code);
 }
 

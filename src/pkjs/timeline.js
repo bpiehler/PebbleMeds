@@ -50,13 +50,14 @@ function pushTimelinePins(cfg) {
 
   var pins        = [];
   var newPinIdMap = {};
+  var marks       = getMarks();
 
   cfg.meds.forEach(function (med, index) {
     var doseTimes = schedule.getNextDoseTimes(med, now, horizon);
     console.log('Timeline: med ' + index + ' (' + med.name + ') [' + med.medId + '] has ' + doseTimes.length + ' doses in 48h');
     var medId = med.medId;
     doseTimes.forEach(function (ts) {
-      var pin = buildPin(med, ts, privacyMode);
+      var pin = buildPin(med, ts, privacyMode, index, marks[index + ':' + ts]);
       pins.push(pin);
       if (!newPinIdMap[medId]) newPinIdMap[medId] = [];
       newPinIdMap[medId].push(pin.id);
@@ -72,13 +73,39 @@ function pushTimelinePins(cfg) {
   storePinIdMap(newPinIdMap);
 }
 
-function buildPin(med, ts, privacyMode) {
+// Launch codes carry the action, med index and dose minute so the watch can act
+// on that exact dose. Must match notifications_handle_timeline_action().
+var LAUNCH_EPOCH  = 1672531200;  // 2023-01-01 UTC; minutes from here fit in 26 bits
+var LAUNCH_OPEN   = 1;
+
+function launchCode(action, medIndex, ts) {
+  var minutes = Math.floor((ts - LAUNCH_EPOCH) / 60);
+  return minutes * 64 + (medIndex & 0xF) * 4 + action;
+}
+
+// Taken or Skipped for each dose answered on the watch, keyed "medIndex:ts".
+function getMarks() {
+  var marks = {};
+  try {
+    var log = JSON.parse(localStorage.getItem('pebble_meds_log') || '[]');
+    log.forEach(function (entry) {
+      if (entry.status === 'taken' || entry.status === 'skipped') {
+        marks[entry.medIndex + ':' + entry.ts] = entry.status;
+      }
+    });
+  } catch (e) {}
+  return marks;
+}
+
+// A dose already answered shows its answer.
+function buildPin(med, ts, privacyMode, medIndex, mark) {
+  medIndex = medIndex || 0;
   var medId = med.medId || uuidv4();
   var title = privacyMode ? 'Medication Due' : med.name;
   var body  = privacyMode
     ? med.taker
     : (med.taker + (med.dose ? ' \u2014 ' + med.dose : ''));
-  return {
+  var pin = {
     id: 'pebble-meds-' + medId + '-' + ts,
     time: new Date(ts * 1000).toISOString(),
     layout: {
@@ -88,10 +115,11 @@ function buildPin(med, ts, privacyMode) {
       tinyIcon: 'system://images/NOTIFICATION_REMINDER',
     },
     actions: [
-      { title: 'Taken',  type: 'openWatchApp', launchCode: 1 },
-      { title: 'Snooze', type: 'openWatchApp', launchCode: 2 },
+      { title: 'Open in Pebble Meds', type: 'openWatchApp', launchCode: launchCode(LAUNCH_OPEN, medIndex, ts) },
     ],
   };
+  if (mark) pin.layout.subtitle = mark === 'taken' ? 'Taken' : 'Skipped';
+  return pin;
 }
 
 function insertTimelinePin(pin) {
@@ -156,4 +184,5 @@ function storePinIdMap(pinIdMap) {
 module.exports = {
   pushTimelinePins: pushTimelinePins,
   buildPin:         buildPin,
+  launchCode:       launchCode,
 };
