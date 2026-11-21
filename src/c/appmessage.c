@@ -28,6 +28,22 @@ static char    s_json_buf[JSON_BUF_SIZE];
 static uint8_t s_expected_chunks = 0;
 static uint8_t s_received_chunks = 0;
 
+// Actions wait in storage until the phone confirms them.
+#define PERSIST_KEY_UNSENT 23
+#define UNSENT_MAX         16
+
+typedef struct __attribute__((packed)) {
+    uint32_t dose_ts;
+    uint8_t  med_index;
+    uint8_t  action;  // index into ACTION_NAMES
+} Unsent;
+
+static const char *const ACTION_NAMES[] = {"taken", "skipped", "snooze"};
+#define ACTION_COUNT (sizeof(ACTION_NAMES) / sizeof(ACTION_NAMES[0]))
+
+static bool s_sending;      // an action is in the outbox
+static bool s_sync_wanted;  // config was set aside while actions were unsent
+
 // ---------------------------------------------------------------------------
 // jsmn helpers
 // ---------------------------------------------------------------------------
@@ -320,6 +336,45 @@ static void process_config_json(const char *json) {
 }
 
 // ---------------------------------------------------------------------------
+// Unsent actions
+// ---------------------------------------------------------------------------
+
+static uint8_t unsent_read(Unsent *out) {
+    int size = persist_get_size(PERSIST_KEY_UNSENT);
+    if (size <= 0) return 0;
+    persist_read_data(PERSIST_KEY_UNSENT, out, UNSENT_MAX * sizeof(Unsent));
+    return (uint8_t)(size / (int)sizeof(Unsent));
+}
+
+static void unsent_write(const Unsent *list, uint8_t count) {
+    if (count > 0) {
+        persist_write_data(PERSIST_KEY_UNSENT, list, count * sizeof(Unsent));
+    } else {
+        persist_delete(PERSIST_KEY_UNSENT);
+    }
+}
+
+// Sends the oldest unsent action. With none left, asks for config set aside.
+static void send_next(void) {
+    if (s_sending) return;
+    Unsent list[UNSENT_MAX];
+    uint8_t count = unsent_read(list);
+    if (count == 0) {
+        if (s_sync_wanted) {
+            s_sync_wanted = false;
+            appmessage_request_sync();
+        }
+        return;
+    }
+    DictionaryIterator *iter;
+    if (app_message_outbox_begin(&iter) != APP_MSG_OK) return;
+    dict_write_cstring(iter, KEY_ACTION,    ACTION_NAMES[list[0].action]);
+    dict_write_uint8(iter,   KEY_MED_INDEX, list[0].med_index);
+    dict_write_uint32(iter,  KEY_DOSE_TS,   list[0].dose_ts);
+    s_sending = (app_message_outbox_send() == APP_MSG_OK);
+}
+
+// ---------------------------------------------------------------------------
 // AppMessage inbox
 // ---------------------------------------------------------------------------
 
@@ -349,7 +404,14 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
         }
 
         if (s_received_chunks == s_expected_chunks) {
-            process_config_json(s_json_buf);
+            Unsent list[UNSENT_MAX];
+            if (unsent_read(list) > 0) {
+                // The phone has not seen these actions yet. Send them, then ask again.
+                s_sync_wanted = true;
+            } else {
+                process_config_json(s_json_buf);
+            }
+            send_next();
         }
     }
 
@@ -363,8 +425,22 @@ static void inbox_dropped(AppMessageResult reason, void *context) {
     APP_LOG(APP_LOG_LEVEL_WARNING, "AppMessage dropped: %d", (int)reason);
 }
 
+static void outbox_sent(DictionaryIterator *iter, void *context) {
+    if (!dict_find(iter, KEY_ACTION)) return;
+    s_sending = false;
+    Unsent list[UNSENT_MAX];
+    uint8_t count = unsent_read(list);
+    if (count > 0) {
+        memmove(list, list + 1, (count - 1) * sizeof(Unsent));
+        unsent_write(list, count - 1);
+    }
+    send_next();
+}
+
+// The action stays saved and is sent again when the phone next sends config.
 static void outbox_failed(DictionaryIterator *iter, AppMessageResult reason, void *context) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "AppMessage send failed: %d", (int)reason);
+    if (dict_find(iter, KEY_ACTION)) s_sending = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -374,8 +450,10 @@ static void outbox_failed(DictionaryIterator *iter, AppMessageResult reason, voi
 void appmessage_init(void) {
     app_message_register_inbox_received(inbox_received);
     app_message_register_inbox_dropped(inbox_dropped);
+    app_message_register_outbox_sent(outbox_sent);
     app_message_register_outbox_failed(outbox_failed);
     app_message_open(768, 256);
+    send_next();
 }
 
 void appmessage_deinit(void) {
@@ -383,12 +461,21 @@ void appmessage_deinit(void) {
 }
 
 void appmessage_send_action(uint8_t med_index, const char *action, uint32_t dose_ts) {
-    DictionaryIterator *iter;
-    if (app_message_outbox_begin(&iter) != APP_MSG_OK) return;
-    dict_write_cstring(iter, KEY_ACTION,    action);
-    dict_write_uint8(iter,   KEY_MED_INDEX, med_index);
-    dict_write_uint32(iter,  KEY_DOSE_TS,   dose_ts);
-    app_message_outbox_send();
+    uint8_t code = 0;
+    while (code < ACTION_COUNT && strcmp(ACTION_NAMES[code], action) != 0) code++;
+    if (code == ACTION_COUNT) return;
+
+    Unsent list[UNSENT_MAX];
+    uint8_t count = unsent_read(list);
+    if (count == UNSENT_MAX) {
+        // Full: drop the oldest. Never the one in the outbox, which goes first.
+        uint8_t drop = s_sending ? 1 : 0;
+        memmove(list + drop, list + drop + 1, (count - drop - 1) * sizeof(Unsent));
+        count--;
+    }
+    list[count++] = (Unsent){ .dose_ts = dose_ts, .med_index = med_index, .action = code };
+    unsent_write(list, count);
+    send_next();
 }
 
 void appmessage_request_sync(void) {
